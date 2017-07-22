@@ -28,7 +28,8 @@ class About(Screen):
 		AboutText = _("Hardware: ") + about.getHardwareTypeString() + "\n"
 		AboutText += _("CPU: ") + about.getCPUInfoString() + "\n"
 		AboutText += _("Image: ") + about.getImageTypeString() + "\n"
-		AboutText += _("Installed: ") + about.getFlashDateString() + "\n"
+		# [WanWizard] Removed until we find a reliable way to determine the installation date
+		# AboutText += _("Installed: ") + about.getFlashDateString() + "\n"
 		AboutText += _("Kernel version: ") + about.getKernelVersionString() + "\n"
 
 		EnigmaVersion = "Enigma: " + about.getEnigmaVersionString()
@@ -178,7 +179,7 @@ class CommitInfo(Screen):
 
 		# get the branch to display from the Enigma version
 		try:
-			branch = "?sha=" + about.getEnigmaVersionString().split("-")[-1]
+			branch = "?sha=" + "-".join(about.getEnigmaVersionString().split("-")[3:])
 		except:
 			branch = ""
 

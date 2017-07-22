@@ -207,6 +207,9 @@ def getHotkeyFunctions():
 	for plugin in plugins.getPluginsForMenu("system"):
 		if plugin[2]:
 			hotkeyFunctions.append((plugin[0], "MenuPlugin/system/" + plugin[2], "Setup"))
+	for plugin in plugins.getPluginsForMenu("video"):
+		if plugin[2]:
+			hotkeyFunctions.append((plugin[0], "MenuPlugin/video/" + plugin[2], "Setup"))
 	hotkeyFunctions.append((_("PowerMenu"), "Menu/shutdown", "Power"))
 	hotkeyFunctions.append((_("Standby"), "Module/Screens.Standby/Standby", "Power"))
 	hotkeyFunctions.append((_("Restart"), "Module/Screens.Standby/TryQuitMainloop/2", "Power"))
@@ -218,7 +221,6 @@ def getHotkeyFunctions():
 	hotkeyFunctions.append((_("Harddisk Setup"), "Setup/harddisk", "Setup"))
 	hotkeyFunctions.append((_("Subtitles Settings"), "Setup/subtitlesetup", "Setup"))
 	hotkeyFunctions.append((_("Language"), "Module/Screens.LanguageSelection/LanguageSelection", "Setup"))
-	hotkeyFunctions.append((_("Skin setup"), "Module/Screens.SkinSelector/SkinSelector", "Setup"))
 	hotkeyFunctions.append((_("Memory Info"), "Module/Screens.About/MemoryInfo", "Setup"))
 	if os.path.isdir("/etc/ppanels"):
 		for x in [x for x in os.listdir("/etc/ppanels") if x[-4:] == ".xml"]:
@@ -597,8 +599,11 @@ class InfoBarHotkey():
 					exec "self.session.open(" + ",".join(selected[2:]) + ")"
 				except:
 					print "[Hotkey] error during executing module %s, screen %s" % (selected[1], selected[2])
+			elif selected[0] == "SoftcamSetup" and SystemInfo["HasSoftcamInstalled"]:
+				from Screens.SoftcamSetup import SoftcamSetup
+				self.session.open(SoftcamSetup)
 			elif selected[0] == "Setup":
-				from Screens.Setup import Setup
+				from Screens.Setup import *
 				exec "self.session.open(Setup, \"" + selected[1] + "\")"
 			elif selected[0][:3] == "Zap":
 				if selected[0] == "ZapPanic":

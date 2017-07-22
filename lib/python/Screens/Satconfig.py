@@ -7,7 +7,7 @@ from Components.NimManager import nimmanager
 from Components.Button import Button
 from Components.Label import Label
 from Components.SelectionList import SelectionList, SelectionEntryComponent
-from Components.config import getConfigListEntry, config, ConfigNothing, ConfigYesNo, configfile
+from Components.config import getConfigListEntry, config, ConfigNothing, ConfigYesNo, configfile, NoSave
 from Components.Sources.List import List
 from Screens.MessageBox import MessageBox
 from Screens.ChoiceBox import ChoiceBox
@@ -67,7 +67,7 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 				nim.powerMeasurement.value = False
 				nim.powerMeasurement.save()
 		if not hasattr(self, 'additionalMotorOptions'):
-			self.additionalMotorOptions = ConfigYesNo(False)
+			self.additionalMotorOptions = NoSave(ConfigYesNo(False))
 		self.showAdditionalMotorOptions = getConfigListEntry(_("Extra motor options"), self.additionalMotorOptions)
 		self.list.append(self.showAdditionalMotorOptions)
 		if self.additionalMotorOptions.value:
@@ -92,7 +92,6 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 			self.nimConfig.configMode.setChoices(choices, self.nim.isFBCLink() and "nothing" or "simple")
 
 	def createSetup(self):
-		print "Creating setup"
 		self.list = [ ]
 
 		self.multiType = None
@@ -125,6 +124,10 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 		self.selectSatsEntry = None
 		self.advancedSelectSatsEntry = None
 		self.singleSatEntry = None
+		self.toneamplitude = None
+		self.scpc = None
+		self.forcelnbpower = None
+		self.forcetoneburst = None
 
 		if self.nim.isMultiType():
 			multiType = self.nimConfig.multiType
@@ -183,15 +186,19 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 							cur_orb_pos = satlist[0]
 						self.fillListWithAdvancedSatEntrys(self.nimConfig.advanced.sat[cur_orb_pos])
 				self.have_advanced = True
-			if config.usage.setup_level.index >= 2:
+			if self.nimConfig.configMode.value != "nothing" and config.usage.setup_level.index >= 2:
 				if fileExists("/proc/stb/frontend/%d/tone_amplitude" % self.nim.slot):
-					self.list.append(getConfigListEntry(_("Tone amplitude"), self.nimConfig.toneAmplitude))
+					self.toneamplitude = getConfigListEntry(_("Tone amplitude"), self.nimConfig.toneAmplitude)
+					self.list.append(self.toneamplitude)
 				if fileExists("/proc/stb/frontend/%d/use_scpc_optimized_search_range" % self.nim.slot):
-					self.list.append(getConfigListEntry(_("SCPC optimized search range"), self.nimConfig.scpcSearchRange))
+					self.scpc = getConfigListEntry(_("SCPC optimized search range"), self.nimConfig.scpcSearchRange)
+					self.list.append(self.scpc)
 				if SystemInfo["HasForceLNBOn"] and self.nim.isFBCRoot():
-					self.list.append(getConfigListEntry(_("Force LNB Power"), config.misc.forceLnbPower))
+					self.forcelnbpower = getConfigListEntry(_("Force LNB Power"), config.misc.forceLnbPower)
+					self.list.append(self.forcelnbpower)
 				if SystemInfo["HasForceToneburst"] and self.nim.isFBCRoot():
-					self.list.append(getConfigListEntry(_("Force ToneBurst"), config.misc.forceToneBurst))
+					self.forcetoneburst = getConfigListEntry(_("Force ToneBurst"), config.misc.forceToneBurst)
+					self.list.append(self.forcetoneburst)
 		elif self.nim.isCompatible("DVB-C"):
 			self.configMode = getConfigListEntry(_("Configuration mode"), self.nimConfig.configMode)
 			self.list.append(self.configMode)
@@ -262,8 +269,9 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 		if self["config"].getCurrent() in (self.configMode, self.diseqcModeEntry, self.advancedSatsEntry, self.advancedLnbsEntry, self.advancedDiseqcMode, self.advancedUsalsEntry,\
 			self.advancedLof, self.advancedPowerMeasurement, self.turningSpeed, self.advancedType, self.advancedSCR, self.advancedPosition, self.advancedFormat, self.advancedManufacturer,\
 			self.advancedUnicable, self.advancedConnected, self.toneburst, self.committedDiseqcCommand, self.uncommittedDiseqcCommand, self.singleSatEntry,	self.commandOrder,\
-			self.showAdditionalMotorOptions, self.cableScanType, self.multiType, self.cableConfigScanDetails):
-			       self.createSetup()
+			self.showAdditionalMotorOptions, self.cableScanType, self.multiType, self.cableConfigScanDetails, \
+			self.toneamplitude, self.scpc, self.forcelnbpower, self.forcetoneburst) :
+				self.createSetup()
 
 	def run(self):
 		if self.nimConfig.configMode.value == "simple":
@@ -430,7 +438,7 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 					else:
 						self.list.append(getConfigListEntry(_("Stored position"), Sat.rotorposition))
 					if not hasattr(self, 'additionalMotorOptions'):
-						self.additionalMotorOptions = ConfigYesNo(False)
+						self.additionalMotorOptions = NoSave(ConfigYesNo(False))
 					self.showAdditionalMotorOptions = getConfigListEntry(_("Extra motor options"), self.additionalMotorOptions)
 					self.list.append(self.showAdditionalMotorOptions)
 					if self.additionalMotorOptions.value:
@@ -451,7 +459,7 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 		self["config"].list = self.list
 
 	def keyOk(self):
-		if self["config"].isChanged():
+		if self.isChanged():
 			self.stopService()
 		if self["config"].getCurrent() == self.advancedSelectSatsEntry:
 			conf = self.nimConfig.advanced.sat[int(self.nimConfig.advanced.sats.value)].userSatellitesList
@@ -468,7 +476,7 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 			conf.save()
 
 	def keySave(self):
-		if self["config"].isChanged():
+		if self.isChanged():
 			self.stopService()
 		old_configured_sats = nimmanager.getConfiguredSats()
 		if not self.run():
@@ -551,7 +559,7 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 		self["key_yellow"].setText(self.nimConfig.configMode.value == "simple" and _("Auto Diseqc") or _("Configuration mode"))
 
 	def setTextKeyBlue(self):
-		self["key_blue"].setText(self["config"].isChanged() and _("Set default") or "")
+		self["key_blue"].setText(self.isChanged() and _("Set default") or "")
 
 	def keyRight(self):
 		if self.nim.isFBCLink() and self["config"].getCurrent() in (self.advancedLof, self.advancedConnected):
@@ -567,10 +575,18 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 		self.newConfig()
 
 	def keyCancel(self):
-		if self["config"].isChanged():
+		if self.isChanged():
 			self.session.openWithCallback(self.cancelConfirm, MessageBox, _("Really close without saving settings?"))
 		else:
 			self.restartPrevService()
+
+	def isChanged(self):
+		is_changed = False
+		for x in self["config"].list:
+			if x == self.showAdditionalMotorOptions:
+				continue
+			is_changed |= x[1].isChanged()
+		return is_changed
 
 	def saveAll(self):
 		if self.nim.isCompatible("DVB-S"):
@@ -588,7 +604,7 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 					config.misc.forceLnbPower.save()
 				if SystemInfo["HasForceToneburst"]:
 					config.misc.forceToneBurst.save()
-		if self["config"].isChanged():
+		if self.isChanged():
 			for x in self["config"].list:
 				x[1].save()
 			configfile.save()
@@ -612,7 +628,7 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 			self.createSetup()
 
 	def nothingConnectedShortcut(self):
-		if self["config"].isChanged():
+		if self.isChanged():
 			for x in self["config"].list:
 				x[1].cancel()
 			self.setTextKeyBlue()
