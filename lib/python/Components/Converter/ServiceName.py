@@ -36,14 +36,14 @@ class ServiceName(Converter, object):
 			ref = service
 		if not info:
 			return ""
-		if self.type is self.NAME:
+		if self.type == self.NAME:
 			name = ref and info.getName(ref)
 			if name is None:
 				name = info.getName()
 			return name.replace('\xc2\x86', '').replace('\xc2\x87', '')
-		elif self.type is self.PROVIDER:
+		elif self.type == self.PROVIDER:
 			return info.getInfoString(iServiceInformation.sProvider)
-		elif self.type is self.REFERENCE or self.type is self.EDITREFERENCE and hasattr(self.source, "editmode") and self.source.editmode:
+		elif self.type == self.REFERENCE or self.type == self.EDITREFERENCE and hasattr(self.source, "editmode") and self.source.editmode:
 			if not ref:
 				return info.getInfoString(iServiceInformation.sServiceref)
 			nref = resolveAlternate(ref)

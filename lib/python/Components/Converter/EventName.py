@@ -67,9 +67,9 @@ class EventName(Converter, object):
 		if event is None:
 			return ""
 
-		if self.type is self.NAME:
+		if self.type == self.NAME:
 			return event.getEventName()
-		elif self.type is self.SRATING:
+		elif self.type == self.SRATING:
 			rating = event.getParentalData()
 			if rating is None:
 				return ""
@@ -83,7 +83,7 @@ class EventName(Converter, object):
 				else:
 					age += 3
 					return " %d+" % age
-		elif self.type is self.RATING:
+		elif self.type == self.RATING:
 			rating = event.getParentalData()
 			if rating is None:
 				return ""
@@ -97,39 +97,38 @@ class EventName(Converter, object):
 				else:
 					age += 3
 					return _("Minimum age %d years") % age
-		elif self.type is self.GENRE:
+		elif self.type == self.GENRE:
 			genre = event.getGenreData()
 			if genre is None:
 				return ""
 			else:
 				return getGenreStringSub(genre.getLevel1(), genre.getLevel2())
-		elif self.type is self.NAME_NOW:
+		elif self.type == self.NAME_NOW:
 			return pgettext("now/next: 'now' event label", "Now") + ": " + event.getEventName()
-		elif self.type is self.NAME_NEXT:
+		elif self.type == self.NAME_NEXT:
 			return pgettext("now/next: 'next' event label", "Next") + ": " + event.getEventName()
-		elif self.type is self.SHORT_DESCRIPTION:
+		elif self.type == self.SHORT_DESCRIPTION:
 			return event.getShortDescription()
-		elif self.type is self.EXTENDED_DESCRIPTION:
+		elif self.type == self.EXTENDED_DESCRIPTION:
 			return event.getExtendedDescription() or event.getShortDescription()
-		elif self.type is self.FULL_DESCRIPTION:
+		elif self.type == self.FULL_DESCRIPTION:
 			description = event.getShortDescription()
 			extended = event.getExtendedDescription()
-			if description:
-				if extended:
-					description += '\n'
-				elif "no description" in description:
-					return _("no description available")
+			if description and extended:
+				if description.replace('\n','') == extended.replace('\n',''):
+					return extended
+				description += '\n'
 			return description + extended
-		elif self.type is self.ID:
+		elif self.type == self.ID:
 			return str(event.getEventId())
-		elif self.type is self.PDC:
+		elif self.type == self.PDC:
 			if event.getPdcPil():
 				return _("PDC")
 			return ""
 		elif self.type in (self.PDCTIME, self.PDCTIMESHORT):
 			pil = event.getPdcPil()
 			if pil:
-				if self.type is self.PDCTIMESHORT:
+				if self.type == self.PDCTIMESHORT:
 					return _("%02d:%02d") % ((pil & 0x7C0) >> 6, (pil & 0x3F))
 				return _("%d.%02d. %02d:%02d") % ((pil & 0xF8000) >> 15, (pil & 0x7800) >> 11, (pil & 0x7C0) >> 6, (pil & 0x3F))
 			return ""
