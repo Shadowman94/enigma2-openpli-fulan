@@ -432,6 +432,8 @@ int eStaticServiceDVBPVRInformation::getInfo(const eServiceReference &ref, int w
 			return m_parser.m_time_create;
 		else
 			return iServiceInformation::resNA;
+	case iServiceInformation::sIsCrypted:
+		return m_parser.m_scrambled;
 	default:
 		return iServiceInformation::resNA;
 	}
@@ -1445,7 +1447,7 @@ RESULT eDVBServicePlay::setTarget(int target, bool noaudio = false)
 	return 0;
 }
 
-RESULT eDVBServicePlay::connectEvent(const Slot2<void,iPlayableService*,int> &event, ePtr<eConnection> &connection)
+RESULT eDVBServicePlay::connectEvent(const sigc::slot2<void,iPlayableService*,int> &event, ePtr<eConnection> &connection)
 {
 	connection = new eConnection((iPlayableService*)this, m_event.connect(event));
 	return 0;
@@ -1929,6 +1931,9 @@ int eDVBServicePlay::getInfo(int w)
 	case sHideVBI:
 		if (m_dvb_service) return m_dvb_service->doHideVBI();
 		return false;
+	case sCenterDVBSubs:
+		if (m_dvb_service) return m_dvb_service->doCenterDVBSubs();
+		return false;
 	case sVideoPID:
 		if (m_dvb_service)
 		{
@@ -2040,9 +2045,9 @@ void eDVBServicePlay::getAITApplications(std::map<int, std::string> &aitlist)
 	return m_service_handler.getAITApplications(aitlist);
 }
 
-void eDVBServicePlay::getCaIds(std::vector<int> &caids, std::vector<int> &ecmpids)
+void eDVBServicePlay::getCaIds(std::vector<int> &caids, std::vector<int> &ecmpids, std::vector<std::string> &ecmdatabytes)
 {
-	m_service_handler.getCaIds(caids, ecmpids);
+	m_service_handler.getCaIds(caids, ecmpids, ecmdatabytes);
 }
 
 int eDVBServicePlay::getNumberOfTracks()
@@ -2193,7 +2198,7 @@ int eDVBServicePlay::selectAudioStream(int i)
 			if (!h.getDataDemux(data_demux))
 			{
 				m_rds_decoder = new eDVBRdsDecoder(data_demux, different_pid);
-				m_rds_decoder->connectEvent(slot(*this, &eDVBServicePlay::rdsDecoderEvent), m_rds_decoder_event_connection);
+				m_rds_decoder->connectEvent(sigc::mem_fun(*this, &eDVBServicePlay::rdsDecoderEvent), m_rds_decoder_event_connection);
 				m_rds_decoder->start(rdsPid);
 			}
 		}
@@ -2864,7 +2869,7 @@ void eDVBServicePlay::updateDecoder(bool sendSeekableStateChanged)
 		{
 			m_decode_demux->getMPEGDecoder(m_decoder, m_decoder_index);
 			if (m_decoder)
-				m_decoder->connectVideoEvent(slot(*this, &eDVBServicePlay::video_event), m_video_event_connection);
+				m_decoder->connectVideoEvent(sigc::mem_fun(*this, &eDVBServicePlay::video_event), m_video_event_connection);
 		}
 		if (m_cue)
 			m_cue->setDecodingDemux(m_decode_demux, m_decoder);
@@ -2953,10 +2958,10 @@ void eDVBServicePlay::updateDecoder(bool sendSeekableStateChanged)
 		if (mustPlay && m_decode_demux && m_decoder_index == 0)
 		{
 			m_teletext_parser = new eDVBTeletextParser(m_decode_demux);
-			m_teletext_parser->connectNewStream(slot(*this, &eDVBServicePlay::newSubtitleStream), m_new_subtitle_stream_connection);
-			m_teletext_parser->connectNewPage(slot(*this, &eDVBServicePlay::newSubtitlePage), m_new_subtitle_page_connection);
+			m_teletext_parser->connectNewStream(sigc::mem_fun(*this, &eDVBServicePlay::newSubtitleStream), m_new_subtitle_stream_connection);
+			m_teletext_parser->connectNewPage(sigc::mem_fun(*this, &eDVBServicePlay::newSubtitlePage), m_new_subtitle_page_connection);
 			m_subtitle_parser = new eDVBSubtitleParser(m_decode_demux);
-			m_subtitle_parser->connectNewPage(slot(*this, &eDVBServicePlay::newDVBSubtitlePage), m_new_dvb_subtitle_page_connection);
+			m_subtitle_parser->connectNewPage(sigc::mem_fun(*this, &eDVBServicePlay::newDVBSubtitlePage), m_new_dvb_subtitle_page_connection);
 			if (m_timeshift_changed)
 			{
 				struct SubtitleTrack track;

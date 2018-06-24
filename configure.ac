@@ -78,9 +78,9 @@ if test "$enable_gstreamer" = "yes"; then
 		AS_HELP_STRING([--with-gstversion],[use gstreamer version (major.minor)]),
 		[GST_MAJORMINOR=$withval],[GST_MAJORMINOR=0.10])
 	PKG_CHECK_MODULES(GSTREAMER, gstreamer-$GST_MAJORMINOR gstreamer-pbutils-$GST_MAJORMINOR)
-	PKG_CHECK_MODULES(BASE, [freetype2 fribidi gstreamer-$GST_MAJORMINOR gstreamer-pbutils-$GST_MAJORMINOR libdvbsi++ libpng libxml-2.0 sigc++-1.2 libssl libcrypto glib-2.0])
+	PKG_CHECK_MODULES(BASE, [freetype2 fribidi gstreamer-$GST_MAJORMINOR gstreamer-pbutils-$GST_MAJORMINOR libdvbsi++ libpng libxml-2.0 sigc++-2.0 libssl libcrypto glib-2.0])
 else
-	PKG_CHECK_MODULES(BASE, [freetype2 fribidi libdvbsi++ libpng libxml-2.0 sigc++-1.2 libssl libcrypto glib-2.0])
+	PKG_CHECK_MODULES(BASE, [freetype2 fribidi libdvbsi++ libpng libxml-2.0 sigc++-2.0 libssl libcrypto glib-2.0])
 fi
 
 AM_CONDITIONAL(HAVE_LIBDDVD, test "$HAVE_LIBDDVD" = "yes")
@@ -132,6 +132,14 @@ AC_ARG_WITH(7segment,
 	[[TEXTSKIN="default"]]
 )
 AC_SUBST(TEXTSKIN)
+
+if test `echo "$BOXTYPE" | cut -b 1-7` == "mbmicro"; then
+	AC_DEFINE(FORCE_NO_BLENDING_ACCELERATION, 1,[define when the framebuffer acceleration does not have alphablending support, though the autodetection might indicate that it does])
+	AC_DEFINE(FORCE_NO_FILL_ACCELERATION, 1,[define when the framebuffer acceleration does not have fill support])
+	AC_DEFINE(FORCE_ADVANCED_REMOTE, 1,[define to fixup the input device identification when the remote control is actually an 'advanced' remote (with play/forward/rewind keys)])
+	AC_DEFINE(VUPLUS_RC_WORKAROUND, 1, [workaround for problem with vuplus event/rc driver])
+	AC_DEFINE(KEY_PLAY_ACTUALLY_IS_KEY_PLAYPAUSE, 1,[define when rc sends a KEY_PLAY event for its KEY_PLAYPAUSE key])
+fi
 
 AC_ARG_WITH(graphlcd,
 	AC_HELP_STRING([--with-graphlcd], [use GraphLCD color display, yes or no]),
@@ -303,6 +311,8 @@ lib/python/Plugins/SystemPlugins/HdmiCEC/Makefile
 lib/python/Plugins/SystemPlugins/VideoClippingSetup/Makefile
 lib/python/Plugins/Extensions/CutListEditor/Makefile
 lib/python/Plugins/Extensions/CutListEditor/meta/Makefile
+lib/python/Plugins/Extensions/DVDBurn/Makefile
+lib/python/Plugins/Extensions/DVDBurn/meta/Makefile
 lib/python/Plugins/Extensions/DVDPlayer/Makefile
 lib/python/Plugins/Extensions/DVDPlayer/meta/Makefile
 lib/python/Plugins/Extensions/GraphMultiEPG/Makefile
@@ -321,6 +331,8 @@ lib/python/Plugins/Extensions/SocketMMI/src/Makefile
 lib/python/Plugins/Extensions/TuxboxPlugins/Makefile
 lib/python/Plugins/Extensions/TuxboxPlugins/meta/Makefile
 lib/python/Plugins/PLi/Makefile
+lib/python/Plugins/SystemPlugins/CommonInterfaceAssignment/Makefile
+lib/python/Plugins/SystemPlugins/CommonInterfaceAssignment/meta/Makefile
 lib/python/Plugins/SystemPlugins/DefaultServicesScanner/Makefile
 lib/python/Plugins/SystemPlugins/DefaultServicesScanner/meta/Makefile
 lib/python/Plugins/SystemPlugins/DiseqcTester/Makefile
@@ -352,6 +364,14 @@ lib/python/Plugins/SystemPlugins/Videomode/Makefile
 lib/python/Plugins/SystemPlugins/Videomode/meta/Makefile
 lib/python/Plugins/SystemPlugins/WirelessLan/Makefile
 lib/python/Plugins/SystemPlugins/WirelessLan/meta/Makefile
+lib/python/Plugins/SystemPlugins/SparkVFDControl/Makefile
+lib/python/Plugins/SystemPlugins/SparkVFDControl/meta/Makefile
+lib/python/Plugins/SystemPlugins/SH4OSDAdjustment/Makefile
+lib/python/Plugins/SystemPlugins/SH4OSDAdjustment/meta/Makefile
+lib/python/Plugins/SystemPlugins/SH4BoosterControl/Makefile
+lib/python/Plugins/SystemPlugins/SH4BoosterControl/meta/Makefile
+lib/python/Plugins/SystemPlugins/SparkUnionTunerType/Makefile
+lib/python/Plugins/SystemPlugins/SparkUnionTunerType/meta/Makefile
 lib/python/Plugins/SystemPlugins/OnErrorRestartService/Makefile
 lib/python/Tools/Makefile
 po/Makefile

@@ -105,7 +105,7 @@ void keyEvent(const eRCKey &key)
 /* Defined in eerror.cpp */
 void setDebugTime(bool enable);
 
-class eMain: public eApplication, public Object
+class eMain: public eApplication, public sigc::trackable
 {
 	eInit init;
 	ePythonConfigQuery config;
@@ -262,40 +262,25 @@ int main(int argc, char **argv)
 	eDebug("[MAIN] Loading spinners...");
 
 	{
-		unsigned int i = 0;
-		bool def = false;
-		const char *path = "${sysconfdir}/enigma2";
-
+		int i;
 #define MAX_SPINNER 64
 		ePtr<gPixmap> wait[MAX_SPINNER];
-
-		while(i < MAX_SPINNER)
+		for (i=0; i<MAX_SPINNER; ++i)
 		{
 			char filename[64];
 			std::string rfilename;
-			snprintf(filename, sizeof(filename), "%s/spinner/wait%d.png", path, i + 1);
+			snprintf(filename, sizeof(filename), "${datadir}/enigma2/skin_default/spinner/wait%d.png", i + 1);
 			rfilename = eEnv::resolve(filename);
 			loadPNG(wait[i], rfilename.c_str());
 
 			if (!wait[i])
 			{
 				if (!i)
-				{
-					if (def)
-						eDebug("[MAIN] failed to load %s! (%m)", rfilename.c_str());
-					else
-					{
-						def = true;
-						path = "${datadir}/enigma2/skin_default";
-						continue;
-					}
-				}
+					eDebug("[MAIN] failed to load %s: %m", rfilename.c_str());
 				else
-					eDebug("[MAIN] found %d spinner!", i);
-
+					eDebug("[MAIN] found %d spinner!\n", i);
 				break;
 			}
-			i++;
 		}
 		if (i)
 			my_dc->setSpinner(eRect(ePoint(100, 100), wait[0]->size()), wait, i);
@@ -305,7 +290,7 @@ int main(int argc, char **argv)
 
 	gRC::getInstance()->setSpinnerDC(my_dc);
 
-	eRCInput::getInstance()->keyEvent.connect(slot(keyEvent));
+	eRCInput::getInstance()->keyEvent.connect(sigc::ptr_fun(&keyEvent));
 
 #if defined(__sh__) // initialise the vfd class
 	evfd * vfd = new evfd;

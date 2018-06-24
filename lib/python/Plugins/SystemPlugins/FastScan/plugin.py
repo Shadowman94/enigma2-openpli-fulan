@@ -233,6 +233,9 @@ class FastScanScreen(ConfigListScreen, Screen):
 		transponderParameters.modulation = self.transponders[number][7]
 		transponderParameters.rolloff = self.transponders[number][8]
 		transponderParameters.pilot = self.transponders[number][9]
+		transponderParameters.is_id = -1
+		transponderParameters.pls_mode = eDVBFrontendParametersSatellite.PLS_Root
+		transponderParameters.pls_code = 1
 		return transponderParameters
 
 	def startScan(self):
@@ -285,7 +288,7 @@ class FastScanAutoScreen(FastScanScreen):
 	def scanCompleted(self, result):
 		print "[AutoFastScan] completed result = ", result
 		refreshServiceList()
-		self.close(result>0)
+		self.close(result)
 
 	def Power(self):
 		from Screens.Standby import inStandby
@@ -326,7 +329,7 @@ def restartScanAutoStartTimer(reply=False):
 	if not reply:
 		print "[AutoFastScan] Scan was not succesfully retry in one hour"
 		FastScanAutoStartTimer.startLongTimer(3600)
-	else:
+	elif reply is not True:
 		global autoproviders
 		if autoproviders:
 			provider = autoproviders.pop(0)
@@ -362,10 +365,14 @@ def standbyCountChanged(value):
 		inStandby.onClose.append(leaveStandby)
 		FastScanAutoStartTimer.startLongTimer(90)
 
-def startSession(session, **kwargs):
+def autostart(reason, **kwargs):
 	global Session
-	Session = session
-	config.misc.standbyCounter.addNotifier(standbyCountChanged, initial_call=False)
+	if reason == 0 and "session" in kwargs and not Session:
+		Session = kwargs["session"]
+		config.misc.standbyCounter.addNotifier(standbyCountChanged, initial_call=False)
+	elif reason == 1 and Session:
+		Session = None
+		config.misc.standbyCounter.removeNotifier(standbyCountChanged)
 
 def FastScanStart(menuid, **kwargs):
 	if menuid == "scan":
@@ -376,6 +383,6 @@ def FastScanStart(menuid, **kwargs):
 def Plugins(**kwargs):
 	if (nimmanager.hasNimType("DVB-S")):
 		return [PluginDescriptor(name=_("Fast Scan"), description="Scan Dutch/Belgian sat provider", where = PluginDescriptor.WHERE_MENU, fnc=FastScanStart),
-			PluginDescriptor(where=[PluginDescriptor.WHERE_SESSIONSTART], fnc=startSession)]
+			PluginDescriptor(where=[PluginDescriptor.WHERE_SESSIONSTART, PluginDescriptor.WHERE_AUTOSTART], fnc=autostart)]
 	else:
 		return []

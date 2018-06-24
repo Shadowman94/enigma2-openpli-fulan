@@ -28,7 +28,8 @@ class About(Screen):
 		AboutText = _("Hardware: ") + about.getHardwareTypeString() + "\n"
 		AboutText += _("CPU: ") + about.getCPUInfoString() + "\n"
 		AboutText += _("Image: ") + about.getImageTypeString() + "\n"
-		#AboutText += _("Installed: ") + about.getFlashDateString() + "\n"
+		# [WanWizard] Removed until we find a reliable way to determine the installation date
+		# AboutText += _("Installed: ") + about.getFlashDateString() + "\n"
 		AboutText += _("Kernel version: ") + about.getKernelVersionString() + "\n"
 
 		EnigmaVersion = "Enigma: " + about.getEnigmaVersionString()
@@ -36,10 +37,9 @@ class About(Screen):
 		AboutText += EnigmaVersion + "\n"
 		AboutText += _("Enigma (re)starts: %d\n") % config.misc.startCounter.value
 
-		#GStreamerVersion = "GStreamer: " + about.getGStreamerVersionString().replace("GStreamer","")
-		#self["GStreamerVersion"] = StaticText(GStreamerVersion)
-		#AboutText += GStreamerVersion + "\n"
-		self["GStreamerVersion"] = StaticText("")
+		GStreamerVersion = "GStreamer: " + about.getGStreamerVersionString().replace("GStreamer","")
+		self["GStreamerVersion"] = StaticText(GStreamerVersion)
+		AboutText += GStreamerVersion + "\n"
 
 		ImageVersion = _("Last upgrade: ") + about.getImageVersionString()
 		self["ImageVersion"] = StaticText(ImageVersion)
@@ -50,7 +50,7 @@ class About(Screen):
 		AboutText += _("Python version: ") + about.getPythonVersionString() + "\n"
 
 		fp_version = getFPVersion()
-		if fp_version is None or fp_version == 0:
+		if fp_version is None:
 			fp_version = ""
 		else:
 			fp_version = _("Frontprocessor version: %s") % fp_version
@@ -61,7 +61,7 @@ class About(Screen):
 		self["TunerHeader"] = StaticText(_("Detected NIMs:"))
 		AboutText += "\n" + _("Detected NIMs:") + "\n"
 
-		nims = nimmanager.nimList(showFBCTuners=False)
+		nims = nimmanager.nimListCompressed()
 		for count in range(len(nims)):
 			if count < 4:
 				self["Tuner" + str(count)] = StaticText(nims[count])
@@ -177,14 +177,25 @@ class CommitInfo(Screen):
 
 		self["key_red"] = Button(_("Cancel"))
 
+		# get the branch to display from the Enigma version
+		try:
+			branch = "?sha=" + "-".join(about.getEnigmaVersionString().split("-")[3:])
+		except:
+			branch = ""
+
 		self.project = 0
 		self.projects = [
-			("ttps://api.github.com/repos/taapat/enigma2-openpli-fulan/commits", "Taapat fulan Enigma2"),
-			("https://api.github.com/repos/taapat/vuplus-fulan-openpli-oe-cor/commits", "Taapat vuplus fulan openpli-oe-core"),
+			("https://api.github.com/repos/openpli/enigma2/commits" + branch, "Enigma2"),
+			("https://api.github.com/repos/openpli/openpli-oe-core/commits" + branch, "Openpli Oe Core"),
 			("https://api.github.com/repos/openpli/enigma2-plugins/commits", "Enigma2 Plugins"),
-			("https://api.github.com/repos/taapat/skin-MetropolisHD/commits", "aapat skin-MetropolisHD"),
-			("https://api.github.com/repos/littlesat/skin-PLiHD/commits", "Skin PLi HD"),
+			("https://api.github.com/repos/openpli/aio-grab/commits", "Aio Grab"),
+			("https://api.github.com/repos/openpli/gst-plugin-dvbmediasink/commits", "Gst Plugin Dvbmediasink"),
+			("https://api.github.com/repos/openpli/enigma2-plugin-extensions-xmltvimport/commits", "Plugin Xmltvimport"),
+			("https://api.github.com/repos/openpli/enigma2-plugin-skins-magic/commits", "Skin Magic SD"),
 			("https://api.github.com/repos/openpli/tuxtxt/commits", "Tuxtxt"),
+			("https://api.github.com/repos/littlesat/skin-PLiHD/commits", "Skin PLi HD"),
+			("https://api.github.com/repos/E2OpenPlugins/e2openplugin-OpenWebif/commits", "OpenWebif"),
+			("https://api.github.com/repos/haroo/HansSettings/commits", "OpenWebif")
 		]
 		self.cachedProjects = {}
 		self.Timer = eTimer()
@@ -194,23 +205,28 @@ class CommitInfo(Screen):
 	def readGithubCommitLogs(self):
 		url = self.projects[self.project][0]
 		commitlog = ""
+		from datetime import datetime
 		from json import loads
 		from urllib2 import urlopen
 		try:
 			commitlog += 80 * '-' + '\n'
 			commitlog += url.split('/')[-2] + '\n'
 			commitlog += 80 * '-' + '\n'
-			for c in loads(urlopen(url, timeout=5).read()):
+			try:
+				# OpenPli 5.0 uses python 2.7.11 and here we need to bypass the certificate check
+				from ssl import _create_unverified_context
+				log = loads(urlopen(url, timeout=5, context=_create_unverified_context()).read())
+			except:
+				log = loads(urlopen(url, timeout=5).read())
+			for c in log:
 				creator = c['commit']['author']['name']
 				title = c['commit']['message']
-				if '\n' in title:
-					title = title.split('\n', 1)[0]
-				date = c['commit']['committer']['date'].replace('T', ' ').replace('Z', '')
+				date = datetime.strptime(c['commit']['committer']['date'], '%Y-%m-%dT%H:%M:%SZ').strftime('%x %X')
 				commitlog += date + ' ' + creator + '\n' + title + 2 * '\n'
 			commitlog = commitlog.encode('utf-8')
 			self.cachedProjects[self.projects[self.project][1]] = commitlog
 		except:
-			commitlog = _("Currently the commit log cannot be retrieved - please try later again")
+			commitlog += _("Currently the commit log cannot be retrieved - please try later again")
 		self["AboutScrollLabel"].setText(commitlog)
 
 	def updateCommitLogs(self):
@@ -277,9 +293,9 @@ class MemoryInfo(Screen):
 					units = ""
 				else:
 					continue
-				if "MemTotal" in name:
+				if name.startswith("MemTotal"):
 					mem = int(size)
-				if "MemFree" in name or "Buffers" in name or name[:6] == "Cached":
+				if name.startswith("MemFree") or name.startswith("Buffers") or name.startswith("Cached"):
 					free += int(size)
 				if i < rows_in_column:
 					ltext += "".join((name,"\n"))

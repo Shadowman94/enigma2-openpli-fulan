@@ -3,16 +3,9 @@ import os
 from Tools.HardwareInfo import HardwareInfo
 from Tools.BoundFunction import boundFunction
 
-from config import config, ConfigSubsection, ConfigSelection, ConfigFloat, \
-	ConfigSatlist, ConfigYesNo, ConfigInteger, ConfigSubList, ConfigNothing, \
-	ConfigSubDict, ConfigOnOff, ConfigDateTime, ConfigText
+from config import config, ConfigSubsection, ConfigSelection, ConfigFloat, ConfigSatlist, ConfigYesNo, ConfigInteger, ConfigSubList, ConfigNothing, ConfigSubDict, ConfigOnOff, ConfigDateTime, ConfigText
 
-from enigma import eDVBSatelliteEquipmentControl as secClass, \
-	eDVBSatelliteLNBParameters as lnbParam, \
-	eDVBSatelliteDiseqcParameters as diseqcParam, \
-	eDVBSatelliteSwitchParameters as switchParam, \
-	eDVBSatelliteRotorParameters as rotorParam, \
-	eDVBResourceManager, eDVBDB, eEnv
+from enigma import eDVBFrontendParametersSatellite, eDVBSatelliteEquipmentControl as secClass, eDVBSatelliteDiseqcParameters as diseqcParam, eDVBSatelliteSwitchParameters as switchParam, eDVBSatelliteRotorParameters as rotorParam, eDVBResourceManager, eDVBDB, eEnv
 
 from time import localtime, mktime
 from datetime import datetime
@@ -22,10 +15,6 @@ import xml.etree.cElementTree
 config.unicable = ConfigSubsection()
 
 def getConfigSatlist(orbpos, satlist):
-#+++>  CAUSE OF CRASH!
-	if not satlist:
-		return None
-#+++<
 	default_orbpos = None
 	for x in satlist:
 		if x[0] == orbpos:
@@ -343,6 +332,10 @@ class SecConfigure:
 					sec.setLNBLOFL(10750000)
 					sec.setLNBLOFH(10750000)
 					sec.setLNBThreshold(10750000)
+				elif currLnb.lof.value == "ka_sat":
+					sec.setLNBLOFL(21200000)
+					sec.setLNBLOFH(21200000)
+					sec.setLNBThreshold(21200000)
 
 				if currLnb.increased_voltage.value:
 					sec.setLNBIncreasedVoltage(True)
@@ -482,7 +475,7 @@ class SecConfigure:
 		self.update()
 
 class NIM(object):
-	def __init__(self, slot, type, description, has_outputs = True, internally_connectable = None, multi_type = {}, frontend_id = None, i2c = None, is_empty = False, multistream = False):
+	def __init__(self, slot, type, description, has_outputs = True, internally_connectable = None, multi_type = {}, frontend_id = None, i2c = None, is_empty = False):
 		nim_types = ["DVB-S", "DVB-S2", "DVB-C", "DVB-T", "DVB-T2", "ATSC"]
 
 		if type and type not in nim_types:
@@ -493,7 +486,6 @@ class NIM(object):
 		self.type = type
 		self.description = description
 		self.has_outputs = has_outputs
-		self.multistream = multistream
 		self.internally_connectable = internally_connectable
 		self.multi_type = multi_type
 		self.i2c = i2c
@@ -526,19 +518,10 @@ class NIM(object):
 					self.multi_type[str(types.index(type))] = type
 
 	def isCompatible(self, what):
-		if not self.isSupported():
-			return False
-		return what in self.compatible[self.getType()]
+		return self.isSupported() and what in self.compatible[self.getType()]
 
 	def canBeCompatible(self, what):
-		if not self.isSupported():
-			return False
-		if self.isCompatible(what):
-			return True
-		for type in self.multi_type.values():
-			if what in self.compatible[type]:
-				return True
-		return False
+		return self.isSupported() and (self.isCompatible(what) or [x for x in self.multi_type.values() if what in self.compatible[x]]) and True
 
 	def getType(self):
 		try:
@@ -560,16 +543,14 @@ class NIM(object):
 			}
 		return connectable[self.getType()]
 
-	def getSlotName(self):
+	def getSlotID(self, slot=None):
+		return chr(ord('A') + (slot if slot is not None else self.slot))
+
+	def getSlotName(self, slot=None):
 		# get a friendly description for a slot name.
 		# we name them "Tuner A/B/C/...", because that's what's usually written on the back
 		# of the device.
-		return _("Tuner") + " " + chr(ord('A') + self.slot)
-
-	slot_name = property(getSlotName)
-
-	def getSlotID(self):
-		return chr(ord('A') + self.slot)
+		return "%s %s" % (_("Tuner"), self.getSlotID(slot))
 
 	def getI2C(self):
 		return self.i2c
@@ -591,23 +572,17 @@ class NIM(object):
 			open("/proc/stb/frontend/%d/rf_switch" % self.frontend_id, "w").write("external")
 
 	def isMultiType(self):
-		return (len(self.multi_type) > 0)
+		return len(self.multi_type) and True
 
 	def isEmpty(self):
 		return self.__is_empty
-
-	def hasMultistream(self):
-		return self.multistream
 
 	# empty tuners are supported!
 	def isSupported(self):
 		return (self.frontend_id is not None) or self.__is_empty
 
 	def isMultistream(self):
-		# Spark support multistream thefore return True without test
-		return True
-
-		multistream = self.frontend_id and eDVBResourceManager.getInstance().frontendIsMultistream(self.frontend_id) or False
+		multistream = self.frontend_id is not None and eDVBResourceManager.getInstance().frontendIsMultistream(self.frontend_id) or False
 		# HACK due to poor support for VTUNER_SET_FE_INFO
 		# When vtuner does not accept fe_info we have to fallback to detection using tuner name
 		# More tuner names will be added when confirmed as multistream (FE_CAN_MULTISTREAM)
@@ -623,31 +598,36 @@ class NIM(object):
 		return (self.frontend_id is not None) and os.access("/proc/stb/frontend/%d/fbc_id" % self.frontend_id, os.F_OK)
 
 	def isFBCRoot(self):
-		return self.isFBCTuner() and (self.slot % 8 < 2)
+		return self.isFBCTuner() and (self.slot % 8 < (self.getType() == "DVB-C" and 1 or 2))
 
 	def isFBCLink(self):
-		return self.isFBCTuner() and not (self.slot % 8 < 2)
+		return self.isFBCTuner() and not (self.slot % 8 < (self.getType() == "DVB-C" and 1 or 2))
 
-	slot_id = property(getSlotID)
+	def isNotFirstFBCTuner(self):
+		return self.isFBCTuner() and self.slot % 8 and True
 
 	def getFriendlyType(self):
 		return self.getType() or _("empty")
 
-	friendly_type = property(getFriendlyType)
+	def getFullDescription(self):
+		return self.empty and _("(empty)") or "%s (%s)" % (self.description, self.isSupported() and self.friendly_type or _("not supported"))
 
 	def getFriendlyFullDescription(self):
-		nim_text = self.slot_name + ": "
+		return "%s: %s" % (self.slot_name, self.getFullDescription())
 
-		if self.empty:
-			nim_text += _("(empty)")
-		elif not self.isSupported():
-			nim_text += self.description + " (" + _("not supported") + ")"
-		else:
-			nim_text += self.description + " (" + self.friendly_type + ")"
+	def getFriendlyFullDescriptionCompressed(self):
+		if self.isFBCTuner():
+			return "%s-%s: %s" % (self.getSlotName(self.slot & ~7), self.getSlotID((self.slot & ~7) + 7), self.getFullDescription())
+		#compress by combining dual tuners by checking if the next tuner has a rf switch
+		elif self.frontend_id is not None and os.access("/proc/stb/frontend/%d/rf_switch" % (self.frontend_id + 1), os.F_OK):
+			return "%s-%s: %s" % (self.slot_name, self.getSlotID(self.slot + 1), self.getFullDescription())
+		return self.getFriendlyFullDescription()
 
-		return nim_text
-
+	slot_id = property(getSlotID)
+	slot_name = property(getSlotName)
 	friendly_full_description = property(getFriendlyFullDescription)
+	friendly_full_description_compressed = property(getFriendlyFullDescriptionCompressed)
+	friendly_type = property(getFriendlyType)
 	config_mode = property(lambda self: config.Nims[self.slot].configMode.value)
 	config = property(lambda self: config.Nims[self.slot])
 	empty = property(lambda self: self.getType() is None)
@@ -656,9 +636,12 @@ class NimManager:
 	def getConfiguredSats(self):
 		return self.sec.getConfiguredSats()
 
-	def getTransponders(self, pos):
+	def getTransponders(self, pos, feid = None):
 		if pos in self.transponders:
-			return self.transponders[pos]
+			if feid is None or self.nim_slots[feid].isMultistream():
+				return self.transponders[pos]
+			else: # remove multistream transponders
+				return [tp for tp in self.transponders[pos] if not (tp[5] == eDVBFrontendParametersSatellite.System_DVB_S2 and (tp[10] > -1 or tp[11] > 0 or tp[12] > 1))]
 		else:
 			return []
 
@@ -677,17 +660,53 @@ class NimManager:
 			return self.transpondersatsc[self.atscList[nimConfig.atsc.index][0]]
 		return []
 
+	def getCablesList(self):
+		return self.cablesList
+
+	def getCablesCountrycodeList(self):
+		countrycodes = []
+		for x in self.cablesList:
+			if x[2] and x[2] not in countrycodes:
+				countrycodes.append(x[2])
+		return countrycodes
+
+	def getCablesByCountrycode(self, countrycode):
+		if countrycode:
+			return [x for x in self.cablesList if x[2] == countrycode]
+		return []
+
 	def getCableDescription(self, nim):
-		return self.cablesList[config.Nims[nim].scan_provider.index][0]
+		return self.cablesList[config.Nims[nim].cable.scan_provider.index][0]
 
 	def getCableFlags(self, nim):
-		return self.cablesList[config.Nims[nim].scan_provider.index][1]
+		return self.cablesList[config.Nims[nim].cable.scan_provider.index][1]
+		
+	def getCableCountrycode(self, nim):
+		return self.cablesList and self.cablesList[config.Nims[nim].cable.scan_provider.index][2] or None
+
+	def getTerrestrialsList(self):
+		return self.terrestrialsList
+
+	def getTerrestrialsCountrycodeList(self):
+		countrycodes = []
+		for x in self.terrestrialsList:
+			if x[2] and x[2] not in countrycodes:
+				countrycodes.append(x[2])
+		return countrycodes
+
+	def getTerrestrialsByCountrycode(self, countrycode):
+		if countrycode:
+			return [x for x in self.terrestrialsList if x[2] == countrycode]
+		return []
 
 	def getTerrestrialDescription(self, nim):
 		return self.terrestrialsList[config.Nims[nim].terrestrial.index][0]
 
 	def getTerrestrialFlags(self, nim):
 		return self.terrestrialsList[config.Nims[nim].terrestrial.index][1]
+
+	def getTerrestrialCountrycode(self, nim):
+		return self.terrestrialsList and self.terrestrialsList[config.Nims[nim].terrestrial.index][2] or None
 
 	def getSatDescription(self, pos):
 		return self.satellites[pos]
@@ -757,26 +776,26 @@ class NimManager:
 			if not line:
 				break
 			line = line.strip()
-			if line[:10] == "NIM Socket":
+			if line.startswith("NIM Socket"):
 				parts = line.split(" ")
 				current_slot = int(parts[2][:-1])
 				entries[current_slot] = {}
-			elif line[:5] == "Type:":
+			elif line.startswith("Type:"):
 				entries[current_slot]["type"] = str(line[6:])
 				entries[current_slot]["isempty"] = False
-			elif line[:5] == "Name:":
+			elif line.startswith("Name:"):
 				entries[current_slot]["name"] = str(line[6:])
 				entries[current_slot]["isempty"] = False
-			elif line[:12] == "Has_Outputs:":
-				input = str(line[13:])
+			elif line.startswith("Has_Outputs:"):
+				input = str(line[len("Has_Outputs:") + 1:])
 				entries[current_slot]["has_outputs"] = (input == "yes")
-			elif line[:23] == "Internally_Connectable:":
-				input = int(line[24:])
+			elif line.startswith("Internally_Connectable:"):
+				input = int(line[len("Internally_Connectable:") + 1:])
 				entries[current_slot]["internally_connectable"] = input
-			elif line[:16] == "Frontend_Device:":
-				input = int(line[17:])
+			elif line.startswith("Frontend_Device:"):
+				input = int(line[len("Frontend_Device:") + 1:])
 				entries[current_slot]["frontend_device"] = input
-			elif  line[:4] == "Mode":
+			elif  line.startswith("Mode"):
 				# "Mode 0: DVB-T" -> ["Mode 0", "DVB-T"]
 				split = line.split(": ")
 				if len(split) > 1 and split[1]:
@@ -785,13 +804,10 @@ class NimManager:
 					modes = entries[current_slot].get("multi_type", {})
 					modes[split2[1]] = split[1].strip()
 					entries[current_slot]["multi_type"] = modes
-			elif line[:12] == "Multistream:":
-				input = str(line[13:])
-				entries[current_slot]["multistream"] = (input == "yes")
-			elif line[:11] == "I2C_Device:":
-				input = int(line[12:])
+			elif line.startswith("I2C_Device:"):
+				input = int(line[len("I2C_Device:") + 1:])
 				entries[current_slot]["i2c"] = input
-			elif line[:5] == "empty":
+			elif line.startswith("empty"):
 				entries[current_slot]["type"] = None
 				entries[current_slot]["name"] = _("N/A")
 				entries[current_slot]["isempty"] = True
@@ -805,8 +821,6 @@ class NimManager:
 				entry["i2c"] = None
 			if "has_outputs" not in entry:
 				entry["has_outputs"] = True
-			if "multistream" not in entry:
-				entry["multistream"] = False
 			if "frontend_device" in entry: # check if internally connectable
 				if os.path.exists("/proc/stb/frontend/%d/rf_switch" % entry["frontend_device"]):
 					entry["internally_connectable"] = entry["frontend_device"] - 1
@@ -816,7 +830,7 @@ class NimManager:
 				entry["frontend_device"] = entry["internally_connectable"] = None
 			if "multi_type" not in entry:
 				entry["multi_type"] = {}
-			self.nim_slots.append(NIM(slot = id, description = entry["name"], type = entry["type"], has_outputs = entry["has_outputs"], internally_connectable = entry["internally_connectable"], multi_type = entry["multi_type"], frontend_id = entry["frontend_device"], i2c = entry["i2c"], is_empty = entry["isempty"], multistream = entry["multistream"]))
+			self.nim_slots.append(NIM(slot = id, description = entry["name"], type = entry["type"], has_outputs = entry["has_outputs"], internally_connectable = entry["internally_connectable"], multi_type = entry["multi_type"], frontend_id = entry["frontend_device"], i2c = entry["i2c"], is_empty = entry["isempty"]))
 
 	def hasNimType(self, chktype):
 		return any(slot.canBeCompatible(chktype) for slot in self.nim_slots)
@@ -851,9 +865,11 @@ class NimManager:
 		InitNimManager(self)	#init config stuff
 
 	# get a list with the friendly full description
-	def nimList(self, showFBCTuners=True):
-		list = [slot.friendly_full_description for slot in self.nim_slots if showFBCTuners or not slot.isFBCLink()]
-		return list
+	def nimList(self):
+		return [slot.friendly_full_description for slot in self.nim_slots]
+
+	def nimListCompressed(self):
+		return [slot.friendly_full_description_compressed for slot in self.nim_slots if not(slot.isNotFirstFBCTuner() or slot.internally_connectable >= 0)]
 
 	def getSlotCount(self):
 		return len(self.nim_slots)
@@ -943,11 +959,10 @@ class NimManager:
 	# if slotid == -1, returns if something is connected to ANY nim
 	def somethingConnected(self, slotid = -1):
 		if slotid == -1:
-			connected = False
 			for id in range(self.getSlotCount()):
-				if self.somethingConnected(id):
-					connected = True
-			return connected
+				if self.somethingConnected(id) and not self.nim_slots[id].isFBCLink() and self.nim_slots[id].internally_connectable != id - 1:
+					return True
+			return False
 		else:
 			nim = config.Nims[slotid]
 			configMode = nim.configMode.value
@@ -1119,6 +1134,7 @@ def InitNimManager(nimmgr, update_slots = []):
 		"unicable": _("SCR (Unicable/JESS)"),
 		"c_band": _("C-Band"),
 		"circular_lnb": _("Circular LNB"),
+		"ka_sat": _("KA-SAT"),
 		"user_defined": _("User defined")}
 
 	lnb_choices_default = "universal_lnb"
@@ -1407,7 +1423,7 @@ def InitNimManager(nimmgr, update_slots = []):
 		try:
 			nim.cable
 		except:
-			list = [(str(n), x[0]) for n, x in enumerate(nimmgr.cablesList)]
+			list = [(x[0], x[0]) for x in nimmgr.cablesList]
 			nim.cable = ConfigSubsection()
 			nim.cable.scan_networkid = ConfigInteger(default = 0, limits = (0, 99999))
 			possible_scan_types = [("bands", _("Frequency bands")), ("steps", _("Frequency steps"))]
@@ -1443,7 +1459,7 @@ def InitNimManager(nimmgr, update_slots = []):
 		try:
 			nim.terrestrial
 		except:
-			list = [(str(n), x[0]) for n, x in enumerate(nimmgr.terrestrialsList)]
+			list = [(x[0], x[0]) for x in nimmgr.terrestrialsList]
 			nim.terrestrial = ConfigSelection(choices = list)
 			nim.terrestrial_5V = ConfigOnOff()
 
@@ -1451,7 +1467,7 @@ def InitNimManager(nimmgr, update_slots = []):
 		try:
 			nim.atsc
 		except:
-			list = [(str(n), x[0]) for n, x in enumerate(nimmgr.atscList)]
+			list = [(x[0], x[0]) for x in nimmgr.atscList]
 			nim.atsc = ConfigSelection(choices = list)
 
 	def tunerTypeChanged(nimmgr, configElement, initial=False):

@@ -1,16 +1,52 @@
 import struct, os, time
-from config import config, ConfigSelection, ConfigYesNo, ConfigSubsection, ConfigText
+from config import config, ConfigSelection, ConfigYesNo, ConfigSubsection, ConfigText, ConfigCECAddress, ConfigLocations, ConfigDirectory
 from enigma import eHdmiCEC, eActionMap
-from Components.VolumeControl import VolumeControl
 from Tools.StbHardware import getFPWasTimerWakeup
 from enigma import eTimer
-from Screens import Standby
-from Tools import Directories, Notifications
-from time import time
-import xml.etree.cElementTree
+from sys import maxint
+
+LOGPATH="/hdd/"
+LOGFILE="hdmicec.log"
+
+# CEC Version's table
+CEC = ["1.1","1.2","1.2a","1.3","1.3a","1.4","2.0?","unknown"]
+cmdList = {
+	0x00:"<Polling Message>",
+	0x04:"<Image View On>",
+	0x0d:"<Text View On>",
+	0x32:"<Set Menu Language>",
+	0x36:"<Standby>",
+	0x46:"<Give OSD Name>",
+	0x47:"<Set OSD Name>",
+	0x70:"<System Mode Audio Request>",
+	0x71:"<Give Audio Status>",
+	0x72:"<Set System Audio Mode>",
+	0x7a:"<Report Audio Status>",
+	0x7d:"<Give System Audio Mode Status>",
+	0x7e:"<System Audio Mode Status>",
+	0x80:"<Routing Change>",
+	0x81:"<Routing Information>",
+	0x82:"<Active Source>",
+	0x83:"<Give Physical Address>",
+	0x84:"<Report Physical Address>",
+	0x85:"<Request Active Source>",
+	0x86:"<Set Stream Path>",
+	0x87:"<Device Vendor ID>",
+	0x89:"<Vendor Command>",
+	0x8c:"<Give Device Vendor ID>",
+	0x8d:"<Menu Request>",
+	0x8e:"<Menu Status>",
+	0x8f:"<Give Device Power Status>",
+	0x90:"<Report Power Status>",
+	0x91:"<Get menu language>",
+	0x9e:"<CEC Version>",
+	0x9d:"<Inactive Source>",
+	0x9e:"<CEC Version>",
+	0x9f:"<Get CEC Version>",
+	}
 
 config.hdmicec = ConfigSubsection()
-config.hdmicec.enabled = ConfigYesNo(default = True)
+config.hdmicec.enabled = ConfigYesNo(default = False)
 config.hdmicec.control_tv_standby = ConfigYesNo(default = True)
 config.hdmicec.control_tv_wakeup = ConfigYesNo(default = True)
 config.hdmicec.report_active_source = ConfigYesNo(default = True)
@@ -20,11 +56,12 @@ config.hdmicec.handle_tv_wakeup = ConfigYesNo(default = True)
 config.hdmicec.tv_wakeup_detection = ConfigSelection(
 	choices = {
 	"wakeup": _("Wakeup"),
+	"requestphysicaladdress": _("Request for physical address report"),
 	"tvreportphysicaladdress": _("TV physical address report"),
 	"sourcerequest": _("Source request"),
 	"streamrequest": _("Stream request"),
+	"requestvendor":  _("Request for vendor report"),
 	"osdnamerequest": _("OSD name request"),
-	"vendorid": _("Vendor ID (LG)"),
 	"activity": _("Any activity"),
 	},
 	default = "streamrequest")
@@ -41,6 +78,12 @@ choicelist = []
 for i in [3] + range(5, 65, 5):
 	choicelist.append(("%d" % i, _("%d sec") % i))
 config.hdmicec.repeat_wakeup_timer = ConfigSelection(default = "3", choices = [("0", _("Disabled"))] + choicelist)
+config.hdmicec.debug = ConfigSelection(default = "0", choices = [("0", _("Disabled")), ("1",_("Messages")), ("2",_("Key Events")), ("3",_("All"))])
+config.hdmicec.bookmarks = ConfigLocations(default=[LOGPATH])
+config.hdmicec.log_path = ConfigDirectory(LOGPATH)
+config.hdmicec.next_boxes_detect = ConfigYesNo(default=False)
+config.hdmicec.sourceactive_zaptimers = ConfigYesNo(default=False)
+
 
 class HdmiCec:
 
@@ -50,41 +93,29 @@ class HdmiCec:
 
 		self.wait = eTimer()
 		self.wait.timeout.get().append(self.sendCmd)
+		self.waitKeyEvent = eTimer()
+		self.waitKeyEvent.timeout.get().append(self.sendKeyEvent)
+		self.queueKeyEvent = []
 		self.repeat = eTimer()
 		self.repeat.timeout.get().append(self.wakeupMessages)
 		self.queue = []
+
+		self.delay = eTimer()
+		self.delay.timeout.get().append(self.sendStandbyMessages)
+		self.useStandby = True
 
 		eHdmiCEC.getInstance().messageReceived.get().append(self.messageReceived)
 		config.misc.standbyCounter.addNotifier(self.onEnterStandby, initial_call = False)
 		config.misc.DeepStandby.addNotifier(self.onEnterDeepStandby, initial_call = False)
 		self.setFixedPhysicalAddress(config.hdmicec.fixed_physical_address.value)
-		self.logicaladdress = eHdmiCEC.getInstance().getLogicalAddress()
 
-		self.saveVolUp = None
-		self.saveVolDown = None
-		self.saveVolMute = None
+		self.volumeForwardingEnabled = False
 		self.volumeForwardingDestination = 0
+		self.wakeup_from_tv = False
+		eActionMap.getInstance().bindAction('', -maxint - 1, self.keyEvent)
 		config.hdmicec.volume_forwarding.addNotifier(self.configVolumeForwarding)
 		config.hdmicec.enabled.addNotifier(self.configVolumeForwarding)
-		uptime = float(open("/proc/uptime", "r").read().split()[0])
-		if config.hdmicec.enabled.value and config.hdmicec.handle_deepstandby_events.value and uptime < 120:
-			filename = Directories.resolveFilename(Directories.SCOPE_CONFIG, "timers.xml")
-			try:
-				doc = xml.etree.cElementTree.parse(filename)
-			except:
-				doc = None
-			if doc:
-				root = doc.getroot()
-				for timer in root.findall("timer"):
-					begin = int(timer.get("begin"))
-					disabled = long(timer.get("disabled") or "0")
-					justplay = long(timer.get("justplay") or "0")
-					always_zap = long(timer.get("always_zap") or "0")
-					if begin < time() or begin > time() + 360 or disabled or justplay or always_zap:
-						continue
-					if Standby.inStandby is None:
-						Notifications.AddNotification(Standby.Standby)
-					return
+		if config.hdmicec.enabled.value and config.hdmicec.handle_deepstandby_events.value and not getFPWasTimerWakeup():
 			self.onLeaveStandby()
 
 	def getPhysicalAddress(self):
@@ -105,16 +136,14 @@ class HdmiCec:
 		if message == "wakeup":
 			cmd = 0x04
 		elif message == "sourceactive":
-			address = self.logicaladdress * 0x10 + 0x0f # use broadcast for active source command
+			address = 0x0f # use broadcast for active source command
 			cmd = 0x82
-			physicaladdress = eHdmiCEC.getInstance().getPhysicalAddress()
-			data = str(struct.pack('BB', int(physicaladdress/256), int(physicaladdress%256)))
+			data = self.setData()
 		elif message == "standby":
 			cmd = 0x36
 		elif message == "sourceinactive":
-			physicaladdress = eHdmiCEC.getInstance().getPhysicalAddress()
 			cmd = 0x9d
-			data = str(struct.pack('BB', int(physicaladdress/256), int(physicaladdress%256)))
+			data = self.setData()
 		elif message == "menuactive":
 			cmd = 0x8e
 			data = str(struct.pack('B', 0x00))
@@ -123,64 +152,45 @@ class HdmiCec:
 			data = str(struct.pack('B', 0x01))
 		elif message == "givesystemaudiostatus":
 			cmd = 0x7d
-			address = self.logicaladdress * 0x10 + 0x05
+			address = 0x05
 		elif message == "setsystemaudiomode":
 			cmd = 0x70
-			address = self.logicaladdress * 0x10 + 0x05
-			physicaladdress = eHdmiCEC.getInstance().getPhysicalAddress()
-			data = str(struct.pack('BB', int(physicaladdress/256), int(physicaladdress%256)))
+			address = 0x05
+			data = self.setData()
 		elif message == "osdname":
-			address = self.logicaladdress * 0x10
 			cmd = 0x47
-			data = "Enigma2"
+			data = os.uname()[1]
+			data = data[:14]
 		elif message == "poweractive":
-			address = self.logicaladdress * 0x10
 			cmd = 0x90
 			data = str(struct.pack('B', 0x00))
 		elif message == "powerinactive":
-			address = self.logicaladdress * 0x10
 			cmd = 0x90
 			data = str(struct.pack('B', 0x01))
-		elif message == "poweron":
-			address = self.logicaladdress * 0x10
-			cmd = 0x90
-			data = str(struct.pack('B', 0x02))	
 		elif message == "reportaddress":
-			address = self.logicaladdress * 0x10 + 0x0f # use broadcast address
+			address = 0x0f # use broadcast address
 			cmd = 0x84
-			physicaladdress = eHdmiCEC.getInstance().getPhysicalAddress()
-			devicetype = eHdmiCEC.getInstance().getDeviceType()
-			data = str(struct.pack('BBB', int(physicaladdress/256), int(physicaladdress%256), devicetype))
+			data = self.setData(True)
 		elif message == "vendorid":
-			address = self.logicaladdress * 0x10 + 0x0f
 			cmd = 0x87
-			data = '\x00\xE0\x91'
+			data = '\x00\x00\x00'
 		elif message == "keypoweron":
 			cmd = 0x44
 			data = str(struct.pack('B', 0x6d))
 		elif message == "keypoweroff":
 			cmd = 0x44
 			data = str(struct.pack('B', 0x6c))
-		elif message == "playstatus":
-			address = self.logicaladdress * 0x10
-			cmd = 0x1B
-			data = '\x20'
-		elif message == "vendorcommand0":
-			address = self.logicaladdress * 0x10
-			cmd = 0x89
-			data = '\x02\x05'
-		elif message == "vendorcommand1":
-			address = self.logicaladdress * 0x10
-			cmd = 0x89
-			data = '\xA1\x01'
-		elif message == "vendorcommand2":
-			address = self.logicaladdress * 0x10
-			cmd = 0x89
-			data = '\x0C\x05'
-		elif message == "vendorcommand3":
-			address = self.logicaladdress * 0x10
-			cmd = 0x89
-			data = '\x05\x04' 
+		elif message == "sendcecversion":
+			cmd = 0x9E
+			data = str(struct.pack('B', 0x04)) # v1.3a
+		elif message == "requestactivesource":
+			address = 0x0f # use broadcast address
+			cmd = 0x85
+		elif message == "getpowerstatus":
+			self.useStandby = True;
+			address = 0x0f # use broadcast address => boxes will send info
+			cmd = 0x8f
+
 		if cmd:
 			if config.hdmicec.minimum_send_interval.value != "0":
 				self.queue.append((address, cmd, data))
@@ -188,6 +198,8 @@ class HdmiCec:
 					self.wait.start(int(config.hdmicec.minimum_send_interval.value), True)
 			else:
 				eHdmiCEC.getInstance().sendMessage(address, cmd, data, len(data))
+			if config.hdmicec.debug.value in["1","3"]:
+				self.debugTx(address, cmd, data)
 
 	def sendCmd(self):
 		if len(self.queue):
@@ -199,11 +211,20 @@ class HdmiCec:
 		for message in messages:
 			self.sendMessage(address, message)
 
+	def setData(self, devicetypeSend=False):
+		physicaladdress = eHdmiCEC.getInstance().getPhysicalAddress()
+		if devicetypeSend:
+			devicetype = eHdmiCEC.getInstance().getDeviceType()
+			return str(struct.pack('BBB', int(physicaladdress/256), int(physicaladdress%256), devicetype))
+		return str(struct.pack('BB', int(physicaladdress/256), int(physicaladdress%256)))
+
 	def wakeupMessages(self):
 		if config.hdmicec.enabled.value:
 			messages = []
 			if config.hdmicec.control_tv_wakeup.value:
-				messages.append("wakeup")
+				if not self.wakeup_from_tv:
+					messages.append("wakeup")
+			self.wakeup_from_tv = False
 			if config.hdmicec.report_active_source.value:
 				messages.append("sourceactive")
 			if config.hdmicec.report_active_menu.value:
@@ -217,9 +238,20 @@ class HdmiCec:
 
 	def standbyMessages(self):
 		if config.hdmicec.enabled.value:
+			if config.hdmicec.next_boxes_detect.value:
+				self.secondBoxActive()
+				self.delay.start(1000, True)
+			else:
+				self.sendStandbyMessages()
+
+	def sendStandbyMessages(self):
 			messages = []
 			if config.hdmicec.control_tv_standby.value:
-				messages.append("standby")
+				if self.useStandby:
+					messages.append("standby")
+				else:
+					messages.append("sourceinactive")
+					self.useStandby = True
 			else:
 				if config.hdmicec.report_active_source.value:
 					messages.append("sourceinactive")
@@ -231,6 +263,9 @@ class HdmiCec:
 			if config.hdmicec.control_receiver_standby.value:
 				self.sendMessage(5, "keypoweroff")
 				self.sendMessage(5, "standby")
+
+	def secondBoxActive(self):
+		self.sendMessage(0, "getpowerstatus")
 
 	def onLeaveStandby(self):
 		self.wakeupMessages()
@@ -245,7 +280,10 @@ class HdmiCec:
 
 	def onEnterDeepStandby(self, configElement):
 		if config.hdmicec.handle_deepstandby_events.value:
-			self.standbyMessages()
+			if config.hdmicec.next_boxes_detect.value:
+				self.delay.start(750, True)
+			else:
+				self.sendStandbyMessages()
 
 	def standby(self):
 		from Screens.Standby import Standby, inStandby
@@ -254,6 +292,7 @@ class HdmiCec:
 			Notifications.AddNotification(Standby)
 
 	def wakeup(self):
+		self.wakeup_from_tv = True
 		from Screens.Standby import inStandby
 		if inStandby:
 			inStandby.Power()
@@ -264,24 +303,17 @@ class HdmiCec:
 			cmd = message.getCommand()
 			data = 16 * '\x00'
 			length = message.getData(data, len(data))
-			if cmd == 0x00: # feature abort
-				if data[0] == '\x44':
-					print 'eHdmiCec: volume forwarding not supported by device %02x'%(message.getAddress())
-					self.volumeForwardingDisable()
-			elif cmd == 0x89:
-				if data[0] == '\x01':
-					self.sendMessage(message.getAddress(), 'vendorcommand0')
-				if data[0] == '\xA0':
-				  if inStandby:
-					self.sendMessage(message.getAddress(), 'poweron')
-				  else:
-					self.sendMessage(message.getAddress(), 'poweractive')
-				if data[0] == '\x0B':
-					self.sendMessage(message.getAddress(), 'vendorcommand2')
-				if data[0] == '\x04':
-					self.sendMessage(message.getAddress(), 'vendorcommand3')
-			elif cmd == 0x1A: # request name
-				self.sendMessage(message.getAddress(), 'playstatus')
+
+			if config.hdmicec.debug.value != "0":
+				self.debugRx(length, cmd, data)
+			if cmd == 0x00:
+				if length == 0: # only polling message ( it's some as ping )
+					print "eHdmiCec: received polling message"
+				else:
+					# feature abort
+					if data[0] == '\x44':
+						print 'eHdmiCec: volume forwarding not supported by device %02x'%(message.getAddress())
+						self.volumeForwardingEnabled = False
 			elif cmd == 0x46: # request name
 				self.sendMessage(message.getAddress(), 'osdname')
 			elif cmd == 0x7e or cmd == 0x72: # system audio mode status
@@ -291,7 +323,7 @@ class HdmiCec:
 					self.volumeForwardingDestination = 0 # off: send volume keys to tv
 				if config.hdmicec.volume_forwarding.value:
 					print 'eHdmiCec: volume forwarding to device %02x enabled'%(self.volumeForwardingDestination)
-					self.volumeForwardingEnable()
+					self.volumeForwardingEnabled = True
 			elif cmd == 0x8f: # request power status
 				if inStandby:
 					self.sendMessage(message.getAddress(), 'powerinactive')
@@ -318,16 +350,24 @@ class HdmiCec:
 					if inStandby:
 						self.sendMessage(message.getAddress(), 'menuinactive')
 					else:
-						self.sendMessage(message.getAddress(), 'menuactive') 
+						self.sendMessage(message.getAddress(), 'menuactive')
+			elif cmd == 0x90: # receive powerstatus report
+				if ord(data[0]) == 0: # some box is powered
+					self.useStandby = False
+					print "[HDMI-CEC] powered box found"
+			elif cmd == 0x9F: # request get CEC version
+				self.sendMessage(message.getAddress(), 'sendcecversion')
 
 			# handle standby request from the tv
 			if cmd == 0x36 and config.hdmicec.handle_tv_standby.value:
 				self.standby()
 
 			# handle wakeup requests from the tv
-			if config.hdmicec.handle_tv_wakeup.value:
+			if inStandby and config.hdmicec.handle_tv_wakeup.value:
 				if cmd == 0x04 and config.hdmicec.tv_wakeup_detection.value == "wakeup":
 					self.wakeup()
+				elif cmd == 0x83 and config.hdmicec.tv_wakeup_detection.value == "requestphysicaladdress":
+						self.wakeup()
 				elif cmd == 0x84 and config.hdmicec.tv_wakeup_detection.value == "tvreportphysicaladdress":
 					if (ord(data[0]) * 256 + ord(data[1])) == 0 and ord(data[2]) == 0:
 						self.wakeup()
@@ -338,51 +378,123 @@ class HdmiCec:
 					ouraddress = eHdmiCEC.getInstance().getPhysicalAddress()
 					if physicaladdress == ouraddress:
 						self.wakeup()
+				elif cmd == 0x8C and config.hdmicec.tv_wakeup_detection.value == "requestvendor":
+						self.wakeup()
 				elif cmd == 0x46 and config.hdmicec.tv_wakeup_detection.value == "osdnamerequest":
-					self.wakeup()
-				elif cmd == 0x87 and (ord(data[0])==0x00 and ord(data[1])==0xE0 and ord(data[2])==0x91) and config.hdmicec.tv_wakeup_detection.value == "vendorid":
 					self.wakeup()
 				elif cmd != 0x36 and config.hdmicec.tv_wakeup_detection.value == "activity":
 					self.wakeup()
 
 	def configVolumeForwarding(self, configElement):
 		if config.hdmicec.enabled.value and config.hdmicec.volume_forwarding.value:
-			self.volumeForwardingEnable()
+			self.volumeForwardingEnabled = True
 			self.sendMessage(0x05, 'givesystemaudiostatus')
 		else:
-			self.volumeForwardingDisable()
+			self.volumeForwardingEnabled = False
 
-	def volumeForwardingEnable(self):
-		if self.saveVolMute is None:
-			self.saveVolUp = VolumeControl.volUp
-			self.saveVolDown = VolumeControl.volDown
-			self.saveVolMute = VolumeControl.volMute
-			VolumeControl.volUp = self.volUp
-			VolumeControl.volDown = self.volDown
-			VolumeControl.volMute = self.volMute
+	def keyEvent(self, keyCode, keyEvent):
+		if not self.volumeForwardingEnabled: return
+		cmd = 0
+		data = ''
+		if keyEvent == 0:
+			if keyCode == 115:
+				cmd = 0x44
+				data = str(struct.pack('B', 0x41))
+			if keyCode == 114:
+				cmd = 0x44
+				data = str(struct.pack('B', 0x42))
+			if keyCode == 113:
+				cmd = 0x44
+				data = str(struct.pack('B', 0x43))
+		if keyEvent == 2:
+			if keyCode == 115:
+				cmd = 0x44
+				data = str(struct.pack('B', 0x41))
+			if keyCode == 114:
+				cmd = 0x44
+				data = str(struct.pack('B', 0x42))
+			if keyCode == 113:
+				cmd = 0x44
+				data = str(struct.pack('B', 0x43))
+		if keyEvent == 1:
+			if keyCode == 115 or keyCode == 114 or keyCode == 113:
+				cmd = 0x45
+		if cmd:
+			if config.hdmicec.minimum_send_interval.value != "0":
+				self.queueKeyEvent.append((self.volumeForwardingDestination, cmd, data))
+				if not self.waitKeyEvent.isActive():
+					self.waitKeyEvent.start(int(config.hdmicec.minimum_send_interval.value), True)
+			else:
+				eHdmiCEC.getInstance().sendMessage(self.volumeForwardingDestination, cmd, data, len(data))
+			if config.hdmicec.debug.value in["2","3"]:
+				self.debugTx(self.volumeForwardingDestination, cmd, data)
+			return 1
+		else:
+			return 0
 
-	def volumeForwardingDisable(self):
-		if self.saveVolMute is not None:
-			VolumeControl.volUp = self.saveVolUp
-			VolumeControl.volDown = self.saveVolDown
-			VolumeControl.volMute = self.saveVolMute
-			self.saveVolUp = None
-			self.saveVolDown = None
-			self.saveVolMute = None
+	def sendKeyEvent(self):
+		if len(self.queueKeyEvent):
+			(address, cmd, data) = self.queueKeyEvent.pop(0)
+			eHdmiCEC.getInstance().sendMessage(address, cmd, data, len(data))
+			self.waitKeyEvent.start(int(config.hdmicec.minimum_send_interval.value), True)
 
-	def volUp(self):
-		cmd = 0x44
-		data = str(struct.pack('B', 0x41))
-		eHdmiCEC.getInstance().sendMessage(self.logicaladdress * 0x10 + self.volumeForwardingDestination, cmd, data, len(data))
+	def debugTx(self, address, cmd, data):
+		txt = self.now(True) + self.opCode(cmd, True) + " " + "%02X" % (cmd) + " "
+		tmp = ""
+		if len(data):
+			if cmd in[0x32, 0x47]:
+				for i in range(len(data)):
+					tmp += "%s" % data[i]
+			else:
+				for i in range(len(data)):
+					tmp += "%02X" % ord(data[i]) + " "
+		tmp += 48 * " "
+		self.fdebug(txt + tmp[:48] + "[0x%02X]" % (address) + "\n")
 
-	def volDown(self):
-		cmd = 0x44
-		data = str(struct.pack('B', 0x42))
-		eHdmiCEC.getInstance().sendMessage(self.logicaladdress * 0x10 + self.volumeForwardingDestination, cmd, data, len(data))
+	def debugRx(self, length, cmd, data):
+		txt = self.now()
+		if cmd == 0 and length == 0:
+			txt += self.opCode(cmd) + " - "
+		else:
+			if cmd == 0:
+				txt += "<Feature Abort>" + 13*" " + "<  " + "%02X" % (cmd) + " "
+			else:
+				txt += self.opCode(cmd) + " " + "%02X" % (cmd) + " "
+			for i in range(length-1):
+				if cmd in[0x32, 0x47]:
+					txt += "%s" % data[i]
+				elif cmd == 0x9e:
+					txt += "%02X" % ord(data[i]) + 3*" " + "[version: %s]" % CEC[ord(data[i])]
+				else:
+					txt += "%02X" % ord(data[i]) + " "
+		txt += "\n"
+		self.fdebug(txt)
 
-	def volMute(self):
-		cmd = 0x44
-		data = str(struct.pack('B', 0x43))
-		eHdmiCEC.getInstance().sendMessage(self.logicaladdress * 0x10 + self.volumeForwardingDestination, cmd, data, len(data))
+	def opCode(self, cmd, out=False):
+		send = "<"
+		if out:
+			send = ">"
+		opCode = ''
+		if cmdList.has_key(cmd):
+			opCode += "%s" % cmdList[cmd]
+		opCode += 30 * " "
+		return opCode[:28] + send + " "
+
+	def now(self, out=False, fulldate=False):
+		send = "Rx: "
+		if out:
+			send = "Tx: "
+		import datetime
+		now = datetime.datetime.now()
+		if fulldate:
+			return send + now.strftime("%d-%m-%Y %H:%M:%S") + 2*" "
+		return send + now.strftime("%H:%M:%S") + 2*" "
+
+	def fdebug(self, output):
+		from Tools.Directories import pathExists
+		log_path = config.hdmicec.log_path.value
+		path = os.path.join(log_path, LOGFILE)
+		if pathExists(log_path):
+			fp=file(path,'a');fp.write(output);fp.close()
 
 hdmi_cec = HdmiCec()

@@ -1449,9 +1449,10 @@ class TunerScreen(ConfigListScreen, Screen):
 				self.list.append(self.modulationEntry)
 				self.list.append(getConfigListEntry(_('Roll-off'), self.scan_sat.rolloff))
 				self.list.append(getConfigListEntry(_('Pilot'), self.scan_sat.pilot))
-				self.list.append(getConfigListEntry(_('Input Stream ID'), self.scan_sat.is_id))
-				self.list.append(getConfigListEntry(_("PLS Mode"), self.scan_sat.pls_mode))
-				self.list.append(getConfigListEntry(_('PLS Code'), self.scan_sat.pls_code))
+				if nim.isMultistream():
+					self.list.append(getConfigListEntry(_('Input Stream ID'), self.scan_sat.is_id))
+					self.list.append(getConfigListEntry(_('PLS Mode'), self.scan_sat.pls_mode))
+					self.list.append(getConfigListEntry(_('PLS Code'), self.scan_sat.pls_code))
 		else: # "predefined_transponder"
 			self.list.append(getConfigListEntry(_("Transponder"), self.tuning.transponder))
 			currtp = self.transponderToString([None, self.scan_sat.frequency.value, self.scan_sat.symbolrate.value, self.scan_sat.polarization.value])
@@ -1484,7 +1485,7 @@ class TunerScreen(ConfigListScreen, Screen):
 
 	def updateTransponders(self):
 		if len(self.tuning.sat.choices):
-			transponderlist = nimmanager.getTransponders(int(self.tuning.sat.value))
+			transponderlist = nimmanager.getTransponders(int(self.tuning.sat.value), self.feid)
 			tps = []
 			for transponder in transponderlist:
 				tps.append(self.transponderToString(transponder, scale = 1000))
@@ -1497,7 +1498,7 @@ class TunerScreen(ConfigListScreen, Screen):
 		ConfigListScreen.keyRight(self)
 
 	def keyGo(self):
-		returnvalue = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+		returnvalue = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 1)
 		satpos = int(self.tuning.sat.value)
 		if self.tuning.type.value == "manual_transponder":
 			if self.scan_sat.system.value == eDVBFrontendParametersSatellite.System_DVB_S2:

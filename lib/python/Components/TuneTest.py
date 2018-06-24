@@ -5,8 +5,7 @@ class Tuner:
 		self.frontend = frontend
 		self.ignore_rotor = ignore_rotor
 
-	# transponder = (frequency, symbolrate, polarisation, fec, inversion, orbpos, system, modulation, rolloff, pilot, is_id, pls_mode, pls_code, tsid, onid)
-	#                    0         1             2         3       4         5       6        7          8       9      10    11        12        13    14
+	# transponder = (0:frequency 1:symbolrate 2:polarisation 3:fec 4:inversion 5:orbpos 6:system 7:modulation 8:rolloff 9:pilot 10:is_id 11:pls_mode 12:pls_code 13:tsid 14:onid)
 	def tune(self, transponder):
 		if self.frontend:
 			print "[TuneTest] tuning to transponder with data", transponder
@@ -21,12 +20,14 @@ class Tuner:
 			parm.modulation = transponder[7]
 			parm.rolloff = transponder[8]
 			parm.pilot = transponder[9]
-			try:
+			if len(transponder) > 12:
 				parm.is_id = transponder[10]
 				parm.pls_mode = transponder[11]
 				parm.pls_code = transponder[12]
-			except:
-				pass
+			else:
+				parm.is_id = -1
+				parm.pls_mode = 0
+				parm.pls_code = 1
 			self.tuneSatObj(parm)
 
 	def tuneSatObj(self, transponderObj):
@@ -282,8 +283,7 @@ class TuneTest:
 		self.progressCallback((self.getProgressLength(), self.tuningtransponder, self.STATUS_START, self.currTuned))
 		self.timer.start(100, True)
 
-	# transponder = (frequency, symbolrate, polarisation, fec, inversion, orbpos, system, modulation, rolloff, pilot, is_id, pls_mode, pls_code, tsid, onid)
-	#                    0         1             2         3       4         5       6        7          8       9      10    11        12        13    14
+	# transponder = (0:frequency 1:symbolrate 2:polarisation 3:fec 4:inversion 5:orbpos 6:system 7:modulation 8:rolloff 9:pilot 10:is_id 11:pls_mode 12:pls_code 13:tsid 14:onid)
 	def addTransponder(self, transponder):
 		self.transponderlist.append(transponder)
 

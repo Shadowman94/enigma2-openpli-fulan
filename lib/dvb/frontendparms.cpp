@@ -341,21 +341,27 @@ int eDVBSatelliteTransponderData::getIsId() const
 {
 	if (originalValues) return transponderParameters.is_id;
 
-	return getProperty(DTV_STREAM_ID) & 0xFF;
+	int stream_id = getProperty(DTV_STREAM_ID);
+	if (stream_id == NO_STREAM_ID_FILTER) return transponderParameters.is_id;
+	return stream_id & 0xFF;
 }
 
 int eDVBSatelliteTransponderData::getPLSMode() const
 {
 	if (originalValues) return transponderParameters.pls_mode;
 
-	return (getProperty(DTV_STREAM_ID) >> 26) & 0x3;
+	int stream_id = getProperty(DTV_STREAM_ID);
+	if (stream_id == NO_STREAM_ID_FILTER) return transponderParameters.pls_mode;
+	return (stream_id >> 26) & 0x3;
 }
 
 int eDVBSatelliteTransponderData::getPLSCode() const
 {
 	if (originalValues) return transponderParameters.pls_code;
 
-	return (getProperty(DTV_STREAM_ID) >> 8) & 0x3FFFF;
+	int stream_id = getProperty(DTV_STREAM_ID);
+	if (stream_id == NO_STREAM_ID_FILTER) return transponderParameters.pls_code;
+	return (stream_id >> 8) & 0x3FFFF;
 }
 
 DEFINE_REF(eDVBCableTransponderData);
@@ -496,10 +502,8 @@ int eDVBTerrestrialTransponderData::getCodeRateLp() const
 	switch (getProperty(DTV_CODE_RATE_LP))
 	{
 	case FEC_1_2: return eDVBFrontendParametersTerrestrial::FEC_1_2;
-	case FEC_3_5: return eDVBFrontendParametersTerrestrial::FEC_3_5;
 	case FEC_2_3: return eDVBFrontendParametersTerrestrial::FEC_2_3;
 	case FEC_3_4: return eDVBFrontendParametersTerrestrial::FEC_3_4;
-	case FEC_4_5: return eDVBFrontendParametersTerrestrial::FEC_4_5;
 	case FEC_5_6: return eDVBFrontendParametersTerrestrial::FEC_5_6;
 	case FEC_7_8: return eDVBFrontendParametersTerrestrial::FEC_7_8;
 	default:
@@ -514,10 +518,8 @@ int eDVBTerrestrialTransponderData::getCodeRateHp() const
 	switch (getProperty(DTV_CODE_RATE_HP))
 	{
 	case FEC_1_2: return eDVBFrontendParametersTerrestrial::FEC_1_2;
-	case FEC_3_5: return eDVBFrontendParametersTerrestrial::FEC_3_5;
 	case FEC_2_3: return eDVBFrontendParametersTerrestrial::FEC_2_3;
 	case FEC_3_4: return eDVBFrontendParametersTerrestrial::FEC_3_4;
-	case FEC_4_5: return eDVBFrontendParametersTerrestrial::FEC_4_5;
 	case FEC_5_6: return eDVBFrontendParametersTerrestrial::FEC_5_6;
 	case FEC_7_8: return eDVBFrontendParametersTerrestrial::FEC_7_8;
 	default:
@@ -548,8 +550,7 @@ int eDVBTerrestrialTransponderData::getTransmissionMode() const
 	{
 	case TRANSMISSION_MODE_2K: return eDVBFrontendParametersTerrestrial::TransmissionMode_2k;
 	case TRANSMISSION_MODE_8K: return eDVBFrontendParametersTerrestrial::TransmissionMode_8k;
-#if DVB_API_VERSION > 5 || DVB_API_VERSION == 5 && DVB_API_VERSION_MINOR >= 6
-	case TRANSMISSION_MODE_4K: return eDVBFrontendParametersTerrestrial::TransmissionMode_4k;
+#if DVB_API_VERSION > 5 || DVB_API_VERSION == 5 && DVB_API_VERSION_MINOR >= 5
 	case TRANSMISSION_MODE_1K: return eDVBFrontendParametersTerrestrial::TransmissionMode_1k;
 	case TRANSMISSION_MODE_16K: return eDVBFrontendParametersTerrestrial::TransmissionMode_16k;
 	case TRANSMISSION_MODE_32K: return eDVBFrontendParametersTerrestrial::TransmissionMode_32k;
@@ -569,7 +570,7 @@ int eDVBTerrestrialTransponderData::getGuardInterval() const
 	case GUARD_INTERVAL_1_16: return eDVBFrontendParametersTerrestrial::GuardInterval_1_16;
 	case GUARD_INTERVAL_1_8: return eDVBFrontendParametersTerrestrial::GuardInterval_1_8;
 	case GUARD_INTERVAL_1_4: return eDVBFrontendParametersTerrestrial::GuardInterval_1_4;
-#if DVB_API_VERSION > 5 || DVB_API_VERSION == 5 && DVB_API_VERSION_MINOR >= 6
+#if DVB_API_VERSION > 5 || DVB_API_VERSION == 5 && DVB_API_VERSION_MINOR >= 5
 	case GUARD_INTERVAL_1_128: return eDVBFrontendParametersTerrestrial::GuardInterval_1_128;
 	case GUARD_INTERVAL_19_128: return eDVBFrontendParametersTerrestrial::GuardInterval_19_128;
 	case GUARD_INTERVAL_19_256: return eDVBFrontendParametersTerrestrial::GuardInterval_19_256;

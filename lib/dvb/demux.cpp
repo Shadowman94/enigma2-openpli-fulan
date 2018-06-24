@@ -50,7 +50,8 @@ eDVBDemux::eDVBDemux(int adapter, int demux):
 #ifdef HAVE_AMLOGIC
 	m_pvr_fd(-1),
 #endif
-	m_dvr_busy(0)
+	m_dvr_busy(0),
+	m_dvr_id(-1)
 {
 }
 
@@ -104,6 +105,7 @@ RESULT eDVBDemux::setSourcePVR(int pvrnum)
 	if (res)
 		eDebug("[eDVBDemux] DMX_SET_SOURCE dvr%d failed: %m", pvrnum);
 	source = -1;
+	m_dvr_id = pvrnum;
 	::close(fd);
 	return res;
 }
@@ -178,7 +180,7 @@ RESULT eDVBDemux::flush()
 	return 0;
 }
 
-RESULT eDVBDemux::connectEvent(const Slot1<void,int> &event, ePtr<eConnection> &conn)
+RESULT eDVBDemux::connectEvent(const sigc::slot1<void,int> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_event.connect(event));
 	return 0;
@@ -252,6 +254,7 @@ RESULT eDVBSectionReader::start(const eDVBSectionFilterMask &mask)
 	notifier->start();
 
 	dmx_sct_filter_params sct;
+	memset(&sct, 0, sizeof(sct));
 	sct.pid     = mask.pid;
 	sct.timeout = 0;
 	sct.flags   = DMX_IMMEDIATE_START;
@@ -288,7 +291,7 @@ RESULT eDVBSectionReader::stop()
 	return 0;
 }
 
-RESULT eDVBSectionReader::connectRead(const Slot1<void,const uint8_t*> &r, ePtr<eConnection> &conn)
+RESULT eDVBSectionReader::connectRead(const sigc::slot1<void,const uint8_t*> &r, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, read.connect(r));
 	return 0;
@@ -364,6 +367,8 @@ RESULT eDVBPESReader::start(int pid)
 	m_notifier->start();
 
 	dmx_pes_filter_params flt;
+	memset(&flt, 0, sizeof(flt));
+
 	flt.pes_type = DMX_PES_OTHER;
 	flt.pid     = pid;
 	flt.input   = DMX_IN_FRONTEND;
@@ -392,7 +397,7 @@ RESULT eDVBPESReader::stop()
 	return 0;
 }
 
-RESULT eDVBPESReader::connectRead(const Slot2<void,const uint8_t*,int> &r, ePtr<eConnection> &conn)
+RESULT eDVBPESReader::connectRead(const sigc::slot2<void,const uint8_t*,int> &r, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_read.connect(r));
 	return 0;
@@ -727,12 +732,14 @@ RESULT eDVBTSRecorder::start()
 	setBufferSize(1024*1024);
 
 	dmx_pes_filter_params flt;
+	memset(&flt, 0, sizeof(flt));
+
 	flt.pes_type = DMX_PES_OTHER;
 	flt.output  = DMX_OUT_TSDEMUX_TAP;
 	flt.pid     = i->first;
 	++i;
 	flt.input   = DMX_IN_FRONTEND;
-	flt.flags   = 0;
+	flt.flags   = (m_packetsize == 192) ? 0x80000000 : 0;
 	int res = ::ioctl(m_source_fd, DMX_SET_PES_FILTER, &flt);
 	if (res)
 	{
@@ -881,7 +888,7 @@ RESULT eDVBTSRecorder::getFirstPTS(pts_t &pts)
 	return m_thread->getFirstPTS(pts);
 }
 
-RESULT eDVBTSRecorder::connectEvent(const Slot1<void,int> &event, ePtr<eConnection> &conn)
+RESULT eDVBTSRecorder::connectEvent(const sigc::slot1<void,int> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_event.connect(event));
 	return 0;

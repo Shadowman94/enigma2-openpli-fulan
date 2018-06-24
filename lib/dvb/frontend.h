@@ -52,7 +52,7 @@ public:
 #include <lib/dvb/sec.h>
 class eSecCommandList;
 
-class eDVBFrontend: public iDVBFrontend, public Object
+class eDVBFrontend: public iDVBFrontend, public sigc::trackable
 {
 public:
 	enum {
@@ -76,7 +76,7 @@ public:
 		DICTION,              // current "diction" (0 = normal, 1 = Unicable, 2 = JESS)
 		NUM_DATA_ENTRIES
 	};
-	Signal1<void,iDVBFrontend*> m_stateChanged;
+	sigc::signal1<void,iDVBFrontend*> m_stateChanged;
 private:
 	DECLARE_REF(eDVBFrontend);
 	bool m_simulate;
@@ -137,7 +137,7 @@ public:
 	RESULT prepare_cable(const eDVBFrontendParametersCable &);
 	RESULT prepare_terrestrial(const eDVBFrontendParametersTerrestrial &);
 	RESULT prepare_atsc(const eDVBFrontendParametersATSC &);
-	RESULT connectStateChange(const Slot1<void,iDVBFrontend*> &stateChange, ePtr<eConnection> &connection);
+	RESULT connectStateChange(const sigc::slot1<void,iDVBFrontend*> &stateChange, ePtr<eConnection> &connection);
 	RESULT getState(int &state);
 	RESULT setTone(int tone);
 	RESULT setVoltage(int voltage);
@@ -169,6 +169,7 @@ public:
 	int openFrontend();
 	int closeFrontend(bool force=false, bool no_delayed=false);
 	const char *getDescription() const { return m_description; }
+	const dvb_frontend_info getFrontendInfo() const { return fe_info; }
 	bool is_simulate() const { return m_simulate; }
 	bool is_FBCTuner() { return m_fbc; }
 	void set_FBCTuner(bool yesno) { m_fbc = yesno; }

@@ -4,9 +4,11 @@
 
 #include <lib/base/cfile.h>
 #include <lib/gdi/picload.h>
-#include "libmmeimage/libmmeimage.h"
+#include "mmeimage/libmmeimage.h"
 
 extern "C" {
+#define HAVE_BOOLEAN
+#define boolean int
 #include <jpeglib.h>
 #include <gif_lib.h>
 }
@@ -428,7 +430,7 @@ static int jpeg_save(const char * filename, int ox, int oy, unsigned char *pic_b
 	cinfo.err = jpeg_std_error(&jerr);
 	jpeg_create_compress(&cinfo);
 
-	//eDebug("[ePicLoad] save Thumbnail... %s",filename);
+	eDebug("[ePicLoad] save Thumbnail... %s",filename);
 
 	jpeg_stdio_dest(&cinfo, outfile);
 
@@ -468,7 +470,7 @@ inline void m_rend_gif_decodecolormap(unsigned char *cmb, unsigned char *rgbb, C
 static void gif_load(Cfilepara* filepara, bool forceRGB = false)
 {
 	unsigned char *pic_buffer = NULL;
-	int px, py, i, j, ErrorCode;
+	int px, py, i, j;
 	unsigned char *slb=NULL;
 	GifFileType *gft;
 	GifRecordType rt;
@@ -477,11 +479,9 @@ static void gif_load(Cfilepara* filepara, bool forceRGB = false)
 	int cmaps;
 	int extcode;
 
-	gft = DGifOpenFileName(filepara->file, &ErrorCode);
-	if (gft == NULL) {
-		eDebug("[Picload] Error open gif %i", ErrorCode);
+	gft = DGifOpenFileName(filepara->file, &extcode);
+	if (gft == NULL)
 		return;
-	}
 	do
 	{
 		if (DGifGetRecordType(gft, &rt) == GIF_ERROR)
@@ -569,11 +569,11 @@ static void gif_load(Cfilepara* filepara, bool forceRGB = false)
 	}
 	while (rt != TERMINATE_RECORD_TYPE);
 
-	DGifCloseFile(gft, &ErrorCode);
+	DGifCloseFile(gft, &extcode);
 	return;
 ERROR_R:
 	eDebug("[ePicLoad] <Error gif>");
-	DGifCloseFile(gft, &ErrorCode);
+	DGifCloseFile(gft, &extcode);
 }
 
 //---------------------------------------------------------------------------------------------
@@ -639,7 +639,7 @@ void ePicLoad::decodePic()
 
 	if (m_filepara->id == F_JPEG)
 	{
-		//eDebug("[ePicLoad] hardware decode picture... %s", m_filepara->file);
+		eDebug("[ePicLoad] hardware decode picture... %s", m_filepara->file);
 		m_filepara->pic_buffer = NULL;
 		FILE *fp;
 
@@ -683,7 +683,7 @@ void ePicLoad::decodePic()
 
 void ePicLoad::decodeThumb()
 {
-	//eDebug("[ePicLoad] get Thumbnail... %s",m_filepara->file);
+	eDebug("[ePicLoad] get Thumbnail... %s", m_filepara->file);
 
 	bool exif_thumbnail = false;
 	bool cachefile_found = false;
@@ -699,7 +699,7 @@ void ePicLoad::decodeThumb()
 			m_filepara->file = strdup(THUMBNAILTMPFILE);
 			m_filepara->id = F_JPEG; // imbedded thumbnail seem to be jpeg
 			exif_thumbnail = true;
-			//eDebug("[ePicLoad] decodeThumb: Exif Thumbnail found");
+			eDebug("[ePicLoad] decodeThumb: Exif Thumbnail found");
 		}
 		//else
 		//	eDebug("[ePicLoad] decodeThumb: NO Exif Thumbnail found");
@@ -710,8 +710,8 @@ void ePicLoad::decodeThumb()
 		snprintf(buf, 20, "%d x %d", m_exif->m_exifinfo->Width, m_exif->m_exifinfo->Height);
 		m_filepara->addExifInfo(buf);
 	}
-	//else
-	//	eDebug("[ePicLoad] decodeThumb: NO Exif info");
+	else
+		eDebug("[ePicLoad] decodeThumb: NO Exif info");
 
 	if (!exif_thumbnail && m_conf.usecache)
 	{
@@ -742,7 +742,7 @@ void ePicLoad::decodeThumb()
 				free(m_filepara->file);
 				m_filepara->file = strdup(cachefile.c_str());
 				m_filepara->id = F_JPEG;
-				//eDebug("[ePicLoad] Cache File %s found", cachefile.c_str());
+				eDebug("[ePicLoad] Cache File %s found", cachefile.c_str());
 			}
 		}
 	}
@@ -750,7 +750,7 @@ void ePicLoad::decodeThumb()
 	int hw_decoded = 0;
 	if (m_filepara->id == F_JPEG)
 	{
-		//eDebug("[Picload] hardware decode picture... %s",m_filepara->file);
+		eDebug("[Picload] hardware decode picture... %s",m_filepara->file);
 		m_filepara->pic_buffer = NULL;
 		FILE *fp;
 
@@ -856,7 +856,7 @@ void ePicLoad::gotMessage(const Message &msg)
 			msg_main.send(Message(Message::decode_finished));
 			break;
 		case Message::quit: // called from decode thread
-			//eDebug("[ePicLoad] decode thread ... got quit msg");
+			eDebug("[ePicLoad] decode thread ... got quit msg");
 			quit(0);
 			break;
 		case Message::decode_finished: // called from main thread
@@ -886,7 +886,7 @@ int ePicLoad::startThread(int what, const char *file, int x, int y, bool async)
 {
 	if(async && threadrunning && m_filepara != NULL)
 	{
-		//eDebug("[ePicLoad] thread running");
+		eDebug("[ePicLoad] thread running");
 		m_filepara->callback = false;
 		return 1;
 	}
@@ -1329,10 +1329,10 @@ RESULT ePicLoad::setPara(int width, int height, double aspectRatio, int as, bool
 	m_conf.resizetype = resizeType;
 
 	if(bg_str[0] == '#' && strlen(bg_str)==9)
-		m_conf.background = strtoul(bg_str+1, NULL, 16);
-//	eDebug("[ePicLoad] setPara max-X=%d max-Y=%d aspect_ratio=%lf cache=%d resize=%d bg=#%08X auto_orient=%d",
-//			m_conf.max_x, m_conf.max_y, m_conf.aspect_ratio,
-//			(int)m_conf.usecache, (int)m_conf.resizetype, m_conf.background, m_conf.auto_orientation);
+		m_conf.background = strtoul(bg_str+1, NULL, 16) | 0xFF000000;
+	eDebug("[ePicLoad] setPara max-X=%d max-Y=%d aspect_ratio=%lf cache=%d resize=%d bg=#%08X auto_orient=%d",
+			m_conf.max_x, m_conf.max_y, m_conf.aspect_ratio,
+			(int)m_conf.usecache, (int)m_conf.resizetype, m_conf.background, m_conf.auto_orientation);
 	return 1;
 }
 
@@ -1390,4 +1390,3 @@ SWIG_VOID(int) loadPic(ePtr<gPixmap> &result, std::string filename, int x, int y
 
 	return 0;
 }
-

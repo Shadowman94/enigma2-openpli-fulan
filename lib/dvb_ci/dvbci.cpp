@@ -408,11 +408,11 @@ eDVBCIInterfaces::eDVBCIInterfaces()
 	for (eSmartPtrList<eDVBCISlot>::iterator it(m_slots.begin()); it != m_slots.end(); ++it)
 		it->setSource("A");
 
-	for (int tuner_no = 0; tuner_no < (num_ci > 1 ? 26 : 2); ++tuner_no) // NOTE: this assumes tuners are A .. Z max.
+	for (int tuner_no = 0; tuner_no < 26; ++tuner_no) // NOTE: this assumes tuners are A .. Z max.
 	{
 		path.str("");
 		path.clear();
-		path << "/proc/stb/tsmux/input" << tuner_no;
+		path << "/proc/stb/tsmux/input" << tuner_no << "_choices";
 
 		if(::access(path.str().c_str(), R_OK) < 0)
 			break;
@@ -817,11 +817,7 @@ void eDVBCIInterfaces::recheckPMTHandlers()
 					eDebug("[CI] (1)Slot %d, usecount now %d", ci_it->getSlotID(), ci_it->use_count);
 
 					std::stringstream ci_source;
-					ci_source << "CI";
-					if (getNumOfSlots() > 1) // Only receivers with more that 1 CI expect number after CI
-					{
-						ci_source << ci_it->getSlotID();
-					}
+					ci_source << "CI" << ci_it->getSlotID();
 
 					if (!it->cislot)
 					{
@@ -835,11 +831,24 @@ void eDVBCIInterfaces::recheckPMTHandlers()
 								eDVBFrontend *fe = (eDVBFrontend*) &(*frontend);
 								tunernum = fe->getSlotID();
 							}
+							if (tunernum != -1)
+							{
+								setInputSource(tunernum, ci_source.str());
+								ci_it->setSource(eDVBCISlot::getTunerLetter(tunernum));
+							}
+							else
+							{
+								/*
+								 * No associated frontend, this must be a DVR source
+								 *
+								 * No need to set tuner input (setInputSource), because we have no tuner.
+								 */
+								std::stringstream source;
+								source << "DVR" << channel->getDvrId();
+								ci_it->setSource(source.str());
+							}
 						}
-						ASSERT(tunernum != -1);
 						ci_it->current_tuner = tunernum;
-						setInputSource(tunernum, ci_source.str());
-						ci_it->setSource(eDVBCISlot::getTunerLetter(tunernum));
 					}
 					else
 					{
@@ -920,6 +929,8 @@ void eDVBCIInterfaces::removePMTHandler(eDVBServicePMTHandler *pmthandler)
 				caids.push_back(0xFFFF);
 				slot->sendCAPMT(pmthandler, caids);  // send a capmt without caids to remove a running service
 				slot->removeService(service_to_remove.getServiceID().get());
+				/* restore ci source to the default (tuner "A") */
+				slot->setSource("A");
 			}
 
 			if (!--slot->use_count)
@@ -982,16 +993,19 @@ int eDVBCIInterfaces::getMMIState(int slotid)
 
 int eDVBCIInterfaces::setInputSource(int tuner_no, const std::string &source)
 {
-	char buf[64];
-	snprintf(buf, sizeof(buf), "/proc/stb/tsmux/input%d", tuner_no);
-
-	if (CFile::write(buf, source.c_str()) == -1)
+	if (tuner_no >= 0)
 	{
-		eDebug("[CI] eDVBCIInterfaces setInputSource for input %s failed!", source.c_str());
-		return 0;
-	}
+		char buf[64];
+		snprintf(buf, sizeof(buf), "/proc/stb/tsmux/input%d", tuner_no);
 
-	eDebug("[CI] eDVBCIInterfaces setInputSource(%d, %s)", tuner_no, source.c_str());
+		if (CFile::write(buf, source.c_str()) == -1)
+		{
+			eDebug("[CI] eDVBCIInterfaces setInputSource for input %s failed!", source.c_str());
+			return 0;
+		}
+
+		eDebug("[CI] eDVBCIInterfaces setInputSource(%d, %s)", tuner_no, source.c_str());
+	}
 	return 0;
 }
 
@@ -1738,15 +1752,7 @@ int eDVBCISlot::setSource(const std::string &source)
 {
 	char buf[64];
 	current_source = source;
-
-	if (eDVBCIInterfaces::getInstance()->getNumOfSlots() > 1) // FIXME .. we force DM8000 when more than one CI Slot is avail
-	{
-		snprintf(buf, sizeof(buf), "/proc/stb/tsmux/ci%d_input", slotid);
-	}
-	else // DM7025
-	{
-		snprintf(buf, sizeof(buf), "/proc/stb/tsmux/input2");
-	}
+	snprintf(buf, sizeof(buf), "/proc/stb/tsmux/ci%d_input", slotid);
 
 	if(CFile::write(buf, source.c_str()) == -1)
 	{

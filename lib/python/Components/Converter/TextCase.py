@@ -17,10 +17,10 @@ class TextCase(Converter):
 	@cached
 	def getText(self):
 		originaltext = self.source.getText()
-		if self.type is self.UPPER:
-			return originaltext.upper()
-		elif self.type is self.LOWER:
-			return originaltext.lower()
+		if self.type == self.UPPER:
+			return originaltext.decode('utf-8').upper().encode('utf-8')
+		elif self.type == self.LOWER:
+			return originaltext.decode('utf-8').lower().encode('utf-8')
 		else:
 			return originaltext
 

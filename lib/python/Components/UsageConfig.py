@@ -62,9 +62,9 @@ def InitUsageConfig():
 	config.usage.show_infobar_on_zap = ConfigYesNo(default = True)
 	config.usage.show_infobar_on_skip = ConfigYesNo(default = True)
 	config.usage.show_infobar_on_event_change = ConfigYesNo(default = False)
-	config.usage.show_second_infobar = ConfigSelection(default = None, choices = [(None, _("None"))] + choicelist + [("EPG",_("EPG")), ("Event",_("Event view"))])
+	config.usage.show_second_infobar = ConfigSelection(default = "0", choices = [("", _("None"))] + choicelist + [("EPG",_("EPG"))])
 	config.usage.show_simple_second_infobar = ConfigYesNo(default = False)
-	config.usage.infobar_frontend_source = ConfigSelection(default = "tuner", choices = [("settings", _("Settings")), ("tuner", _("Tuner"))])
+	config.usage.infobar_frontend_source = ConfigSelection(default = "settings", choices = [("settings", _("Settings")), ("tuner", _("Tuner"))])
 	config.usage.oldstyle_zap_controls = ConfigYesNo(default = False)
 	config.usage.oldstyle_channel_select_controls = ConfigYesNo(default = False)
 	config.usage.zap_with_ch_buttons = ConfigYesNo(default = False)
@@ -134,9 +134,9 @@ def InitUsageConfig():
 	config.usage.leave_movieplayer_onExit = ConfigSelection(default = "popup", choices = [
 		("no", _("No")), ("popup", _("With popup")), ("without popup", _("Without popup")), ("movielist", _("Return to movie list")) ])
 
-	config.usage.setup_level = ConfigSelection(default = "expert", choices = [
-		("simple", _("Simple")),
-		("intermediate", _("Intermediate")),
+	config.usage.setup_level = ConfigSelection(default = "simple", choices = [
+		("simple", _("Normal")),
+		("intermediate", _("Advanced")),
 		("expert", _("Expert")) ])
 
 	config.usage.startup_to_standby = ConfigSelection(default = "no", choices = [
@@ -188,7 +188,6 @@ def InitUsageConfig():
 		m = ngettext("%d minute", "%d minutes", m) % m
 		choicelist.append((str(i), _("Standby in ") + m))
 	config.usage.sleep_timer = ConfigSelection(default = "0", choices = choicelist)
-	config.usage.sleep_timer_extension_menu = ConfigYesNo(default = True)
 
 	choicelist = [("0", _("Disabled"))]
 	for i in [60, 300, 600] + range(900, 7201, 900):
@@ -250,6 +249,7 @@ def InitUsageConfig():
 		elif x.isCompatible("ATSC"):
 			atsc_nims.append((str(x.slot), x.getSlotName()))
 		nims.append((str(x.slot), x.getSlotName()))
+
 	SystemInfo["priority_tuner_available"] = len(nims) > 2
 	config.usage.frontend_priority = ConfigSelection(default = "-1", choices = list(nims))
 	nims.insert(0,("-2", _("Disabled")))
@@ -314,6 +314,7 @@ def InitUsageConfig():
 		setPreferredTuner(int(configElement.value))
 	config.usage.frontend_priority.addNotifier(PreferredTunerChanged)
 
+	config.usage.show_picon_in_display = ConfigYesNo(default = True)
 	config.usage.hide_zap_errors = ConfigYesNo(default = False)
 	config.usage.show_cryptoinfo = ConfigYesNo(default = True)
 	config.usage.show_eit_nownext = ConfigYesNo(default = True)
@@ -348,6 +349,12 @@ def InitUsageConfig():
 		config.usage.powerOffDisplay = ConfigYesNo(default = True)
 		config.usage.powerOffDisplay.addNotifier(powerOffDisplayChanged)
 
+	if SystemInfo["LCDshow_symbols"]:
+		def lcdShowSymbols(configElement):
+			open(SystemInfo["LCDshow_symbols"], "w").write(configElement.value and "1" or "0")
+		config.usage.lcd_show_symbols = ConfigYesNo(default = True)
+		config.usage.lcd_show_symbols.addNotifier(lcdShowSymbols)
+
 	if SystemInfo["WakeOnLAN"]:
 		def wakeOnLANChanged(configElement):
 			if "fp" in SystemInfo["WakeOnLAN"]:
@@ -356,6 +363,12 @@ def InitUsageConfig():
 				open(SystemInfo["WakeOnLAN"], "w").write(configElement.value and "on" or "off")
 		config.usage.wakeOnLAN = ConfigYesNo(default = False)
 		config.usage.wakeOnLAN.addNotifier(wakeOnLANChanged)
+
+	if SystemInfo["hasXcoreVFD"]:
+		def set12to8characterVFD(configElement):
+			open(SystemInfo["hasXcoreVFD"], "w").write(not configElement.value and "1" or "0")
+		config.usage.toggle12to8characterVFD = ConfigYesNo(default = False)
+		config.usage.toggle12to8characterVFD.addNotifier(set12to8characterVFD)
 
 	config.epg = ConfigSubsection()
 	config.epg.eit = ConfigYesNo(default = True)
@@ -568,7 +581,7 @@ def InitUsageConfig():
 
 	config.subtitles.dvb_subtitles_yellow = ConfigYesNo(default = False)
 	config.subtitles.dvb_subtitles_original_position = ConfigSelection(default = "0", choices = [("0", _("Original")), ("1", _("Fixed")), ("2", _("Relative"))])
-	config.subtitles.dvb_subtitles_centered = ConfigYesNo(default = True)
+	config.subtitles.dvb_subtitles_centered = ConfigYesNo(default = False)
 	config.subtitles.subtitle_bad_timing_delay = ConfigSelection(default = "0", choices = subtitle_delay_choicelist)
 	config.subtitles.dvb_subtitles_backtrans = ConfigSelection(default = "0", choices = [
 		("0", _("No transparency")),
@@ -605,8 +618,8 @@ def InitUsageConfig():
 		("eus baq", _("Basque")),
 		("bul", _("Bulgarian")),
 		("hrv", _("Croatian")),
-		("chn sgp", _("Simplified Chinese")),
-		("twn hkn",_("Traditional Chinese")),
+		("chn sgp", _("Chinese - Simplified")),
+		("twn hkn",_("Chinese - Traditional")),
 		("ces cze", _("Czech")),
 		("dan", _("Danish")),
 		("dut ndl nld", _("Dutch")),
@@ -623,9 +636,9 @@ def InitUsageConfig():
 		("lit", _("Lithuanian")),
 		("ltz", _("Luxembourgish")),
 		("nor", _("Norwegian")),
+		("fas per fa pes", _("Persian")),
 		("pol", _("Polish")),
-		("por dub Dub DUB ud1", _("Portuguese")),
-		("fas per", _("Persian")),
+		("por dub Dub DUB ud1", _("Portuguese")),		
 		("ron rum", _("Romanian")),
 		("rus", _("Russian")),
 		("srp", _("Serbian")),
@@ -635,8 +648,8 @@ def InitUsageConfig():
 		("swe", _("Swedish")),
 		("tha", _("Thai")),
 		("tur Audio_TUR", _("Turkish")),
-		("ukr Ukr", _("Ukrainian")),
-		("ind", _("Indonesia"))]
+		("ukr Ukr", _("Ukrainian"))]
+
 	def setEpgLanguage(configElement):
 		eServiceEvent.setEPGLanguage(configElement.value)
 	config.autolanguage.audio_epglanguage = ConfigSelection(audio_language_choices[:1] + audio_language_choices [2:], default="---")
@@ -682,6 +695,9 @@ def InitUsageConfig():
 	config.mediaplayer = ConfigSubsection()
 	config.mediaplayer.useAlternateUserAgent = ConfigYesNo(default=False)
 	config.mediaplayer.alternateUserAgent = ConfigText(default="")
+
+	config.misc.softcam_setup = ConfigSubsection()
+	config.misc.softcam_setup.extension_menu = ConfigYesNo(default = True)
 	config.mediaplayer.defaultPlayer = ConfigSelection(default = "libeplayer", choices = [
 		("libeplayer", _("Libeplayer")), ("gstreamer", _("Gstreamer"))])
 	def defaultPlayerChange(configElement):

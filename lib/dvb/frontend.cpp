@@ -110,7 +110,8 @@ void eDVBFrontendParametersSatellite::set(const SatelliteDeliverySystemDescripto
 	}
 	rolloff = descriptor.getRollOff();
 	is_id = NO_STREAM_ID_FILTER;
-	pls_mode = 0; pls_code = 1;
+	pls_mode = eDVBFrontendParametersSatellite::PLS_Root;
+	pls_code = 1;
 	if (system == System_DVB_S2)
 	{
 		eDebug("[eDVBFrontendParametersSatellite] SAT DVB-S2 freq %d, %s, pos %d, sr %d, fec %d, modulation %d, rolloff %d, is_id %d, pls_mode %d, pls_code %d",
@@ -188,7 +189,7 @@ void eDVBFrontendParametersTerrestrial::set(const TerrestrialDeliverySystemDescr
 		default: transmission_mode = TransmissionMode_Auto; break;
 	}
 	guard_interval = descriptor.getGuardInterval();
-	if (guard_interval > GuardInterval_Auto)
+	if (guard_interval > GuardInterval_1_4)
 		guard_interval = GuardInterval_Auto;
 	hierarchy = descriptor.getHierarchyInformation();
 	if (hierarchy > Hierarchy_Auto)
@@ -199,9 +200,9 @@ void eDVBFrontendParametersTerrestrial::set(const TerrestrialDeliverySystemDescr
 	inversion = Inversion_Unknown;
 	system = System_DVB_T;
 	plp_id = 0;
-	eDebug("[eDVBFrontendParametersSatellite] Terr freq %d, bw %d, cr_hp %d, cr_lp %d, tm_mode %d, guard %d, hierarchy %d, const %d, system %d, plp_id %d",
+	eDebug("[eDVBFrontendParametersTerrestrial] Terr freq %d, bw %d, cr_hp %d, cr_lp %d, tm_mode %d, guard %d, hierarchy %d, const %d",
 		frequency, bandwidth, code_rate_HP, code_rate_LP, transmission_mode,
-		guard_interval, hierarchy, modulation, system, plp_id);
+		guard_interval, hierarchy, modulation);
 }
 
 void eDVBFrontendParametersTerrestrial::set(const T2DeliverySystemDescriptor &descriptor)
@@ -414,7 +415,7 @@ RESULT eDVBFrontendParameters::calculateDifference(const iDVBFrontendParameters 
 				oterrestrial.code_rate_HP != eDVBFrontendParametersTerrestrial::FEC_Auto &&
 				terrestrial.code_rate_HP != eDVBFrontendParametersTerrestrial::FEC_Auto)
 				diff = 1 << 30;
-			else if (exact && oterrestrial.plp_id != terrestrial.plp_id)
+			else if (oterrestrial.plp_id != terrestrial.plp_id)
 				diff = 1 << 27;
 			else if (oterrestrial.system != terrestrial.system)
 				diff = 1 << 30;
@@ -564,7 +565,7 @@ int eDVBFrontend::openFrontend()
 	m_state=stateIdle;
 	m_tuning=0;
 
-	if (!m_simulate)
+	if (1) // always open in order to initialize fe_info
 	{
 		eDebug("[eDVBFrontend] opening frontend %d", m_dvbid);
 		if (m_fd < 0)
@@ -669,13 +670,11 @@ int eDVBFrontend::openFrontend()
 		{
 			m_simulate_fe->m_delsys = m_delsys;
 		}
-		m_sn = eSocketNotifier::create(eApp, m_fd, eSocketNotifier::Read, false);
-		CONNECT(m_sn->activated, eDVBFrontend::feEvent);
-	}
-	else
-	{
-		fe_info.frequency_min = 900000;
-		fe_info.frequency_max = 2200000;
+		if (!m_simulate)
+		{
+			m_sn = eSocketNotifier::create(eApp, m_fd, eSocketNotifier::Read, false);
+			CONNECT(m_sn->activated, eDVBFrontend::feEvent);
+		}
 	}
 
 	m_multitype = m_delsys[SYS_DVBS] && (m_delsys[SYS_DVBT] || m_delsys[SYS_DVBC_ANNEX_A]);
@@ -2080,12 +2079,12 @@ void eDVBFrontend::setFrontend(bool recvEvents)
 			switch (parm.code_rate_LP)
 			{
 				case eDVBFrontendParametersTerrestrial::FEC_1_2: p[cmdseq.num].u.data = FEC_1_2; break;
-				case eDVBFrontendParametersTerrestrial::FEC_3_5: p[cmdseq.num].u.data = FEC_3_5; break;
 				case eDVBFrontendParametersTerrestrial::FEC_2_3: p[cmdseq.num].u.data = FEC_2_3; break;
 				case eDVBFrontendParametersTerrestrial::FEC_3_4: p[cmdseq.num].u.data = FEC_3_4; break;
-				case eDVBFrontendParametersTerrestrial::FEC_4_5: p[cmdseq.num].u.data = FEC_4_5; break;
 				case eDVBFrontendParametersTerrestrial::FEC_5_6: p[cmdseq.num].u.data = FEC_5_6; break;
+				case eDVBFrontendParametersTerrestrial::FEC_6_7: p[cmdseq.num].u.data = FEC_6_7; break;
 				case eDVBFrontendParametersTerrestrial::FEC_7_8: p[cmdseq.num].u.data = FEC_7_8; break;
+				case eDVBFrontendParametersTerrestrial::FEC_8_9: p[cmdseq.num].u.data = FEC_8_9; break;
 				default:
 				case eDVBFrontendParametersTerrestrial::FEC_Auto: p[cmdseq.num].u.data = FEC_AUTO; break;
 			}
@@ -2095,12 +2094,12 @@ void eDVBFrontend::setFrontend(bool recvEvents)
 			switch (parm.code_rate_HP)
 			{
 				case eDVBFrontendParametersTerrestrial::FEC_1_2: p[cmdseq.num].u.data = FEC_1_2; break;
-				case eDVBFrontendParametersTerrestrial::FEC_3_5: p[cmdseq.num].u.data = FEC_3_5; break;
 				case eDVBFrontendParametersTerrestrial::FEC_2_3: p[cmdseq.num].u.data = FEC_2_3; break;
 				case eDVBFrontendParametersTerrestrial::FEC_3_4: p[cmdseq.num].u.data = FEC_3_4; break;
-				case eDVBFrontendParametersTerrestrial::FEC_4_5: p[cmdseq.num].u.data = FEC_4_5; break;
 				case eDVBFrontendParametersTerrestrial::FEC_5_6: p[cmdseq.num].u.data = FEC_5_6; break;
+				case eDVBFrontendParametersTerrestrial::FEC_6_7: p[cmdseq.num].u.data = FEC_6_7; break;
 				case eDVBFrontendParametersTerrestrial::FEC_7_8: p[cmdseq.num].u.data = FEC_7_8; break;
+				case eDVBFrontendParametersTerrestrial::FEC_8_9: p[cmdseq.num].u.data = FEC_8_9; break;
 				default:
 				case eDVBFrontendParametersTerrestrial::FEC_Auto: p[cmdseq.num].u.data = FEC_AUTO; break;
 			}
@@ -2442,7 +2441,7 @@ tune_error:
 	return res;
 }
 
-RESULT eDVBFrontend::connectStateChange(const Slot1<void,iDVBFrontend*> &stateChange, ePtr<eConnection> &connection)
+RESULT eDVBFrontend::connectStateChange(const sigc::slot1<void,iDVBFrontend*> &stateChange, ePtr<eConnection> &connection)
 {
 	connection = new eConnection(this, m_stateChanged.connect(stateChange));
 	return 0;
@@ -2608,10 +2607,21 @@ int eDVBFrontend::isCompatibleWith(ePtr<iDVBFrontendParameters> &feparm)
 		{
 			return 0;
 		}
+		bool multistream = (parm.is_id != NO_STREAM_ID_FILTER || (parm.pls_code & 0x3FFFF) != 1 ||
+					(parm.pls_mode & 3) != eDVBFrontendParametersSatellite::PLS_Root);
+		if (parm.system == eDVBFrontendParametersSatellite::System_DVB_S2 && multistream && !is_multistream())
+		{
+			return 0;
+		}
 		score = m_sec ? m_sec->canTune(parm, this, 1 << m_slotid) : 0;
 		if (score > 1 && parm.system == eDVBFrontendParametersSatellite::System_DVB_S && can_handle_dvbs2)
 		{
 			/* prefer to use an S tuner, try to keep S2 free for S2 transponders */
+			score--;
+		}
+		if (score > 1 && is_multistream() && !multistream)
+		{
+			/* prefer to use a non multistream tuner, try to keep multistream tuners free for multistream transponders */
 			score--;
 		}
 	}
@@ -2911,6 +2921,7 @@ std::string eDVBFrontend::getCapabilities()
 		case SYS_DVBC_ANNEX_A:	ss << " DVBC_ANNEX_A"; break;
 #if DVB_API_VERSION > 5 || DVB_API_VERSION == 5 && DVB_API_VERSION_MINOR >= 6
 		case SYS_DVBC_ANNEX_C:	ss << " DVBC_ANNEX_C"; break;
+		case SYS_DVBT2:		ss << " DVBT2"; break;
 		case SYS_TURBO:		ss << " TURBO"; break;
 		case SYS_DTMB:		ss << " DTMB"; break;
 #else

@@ -133,7 +133,9 @@
 		<key id="KEY_PLAY" mapto="showMovies" flags="m"/>
 		<key id="KEY_FIND" mapto="showMovies" flags="m"/>
 		<key id="KEY_FILE" mapto="showMovies" flags="m"/>
-		<key id="KEY_TV" mapto="toggleTvRadio" flags="m"/>
+		<key id="KEY_TV" mapto="toggleTvRadio" flags="b"/>
+		<key id="KEY_RADIO" mapto="toggleTvRadio" flags="b"/>
+		<key id="KEY_MEDIA" mapto="showMovies" flags="b" />
 	</map>
 
 	<map context="InfobarAudioSelectionActions">
@@ -330,6 +332,7 @@
 		<key id="KEY_LEFT" mapto="keyLeft" flags="m"/>
 		<key id="KEY_RIGHT" mapto="keyRight" flags="m"/>
 		<key id="KEY_RECORD" mapto="keyRecord" flags="m"/>
+		<key id="KEY_FAVORITES" mapto="showFavourites" flags="m"/>
 	</map>
 
 	<map context="ChannelSelectEPGActions">
@@ -346,9 +349,9 @@
 	</map>
 
 	<map context="TvRadioActions">
-		<key id="KEY_0" mapto="keyTV" flags="m"/>
-		<key id="KEY_RADIO" mapto="keyRadio" flags="m"/>
-		<key id="KEY_TV" mapto="keyTV" flags="m"/>
+		<key id="KEY_0" mapto="keyTV" flags="b"/>
+		<key id="KEY_RADIO" mapto="keyRadio" flags="b"/>
+		<key id="KEY_TV" mapto="keyTV" flags="b"/>
 	</map>
 
 	<map context="TimerEditActions">
@@ -602,5 +605,7 @@
 		<key id="KEY_USB" mapto="usb_long" flags="l"/>
 		<key id="KEY_PORTAL" mapto="portal" flags="b"/>
 		<key id="KEY_PORTAL" mapto="portal_long" flags="l"/>
+		<key id="KEY_MEDIA" mapto="media" flags="b"/>
+		<key id="KEY_MEDIA" mapto="media_long" flags="l"/>
 	</map>
 </keymap>

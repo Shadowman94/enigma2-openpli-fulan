@@ -427,7 +427,7 @@ eEPGCache::eEPGCache()
 	if (!res_mgr)
 		eDebug("[eEPGCache] no resource manager !!!!!!!");
 	else
-		res_mgr->connectChannelAdded(slot(*this,&eEPGCache::DVBChannelAdded), m_chanAddedConn);
+		res_mgr->connectChannelAdded(sigc::mem_fun(*this,&eEPGCache::DVBChannelAdded), m_chanAddedConn);
 
 	instance=this;
 }
@@ -487,7 +487,7 @@ void eEPGCache::DVBChannelAdded(eDVBChannel *chan)
 #endif
 		singleLock s(channel_map_lock);
 		m_knownChannels.insert( std::pair<iDVBChannel*, channel_data* >(chan, data) );
-		chan->connectStateChange(slot(*this, &eEPGCache::DVBChannelStateChanged), data->m_stateChangedConn);
+		chan->connectStateChange(sigc::mem_fun(*this, &eEPGCache::DVBChannelStateChanged), data->m_stateChangedConn);
 	}
 }
 
@@ -1594,7 +1594,7 @@ void eEPGCache::channel_data::startEPG()
 		mask.pid = 0xD3;
 		mask.data[0] = 0x91;
 		mask.mask[0] = 0xFF;
-		m_MHWReader->connectRead(slot(*this, &eEPGCache::channel_data::readMHWData), m_MHWConn);
+		m_MHWReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::readMHWData), m_MHWConn);
 		m_MHWReader->start(mask);
 		isRunning |= MHW;
 		memcpy(&m_MHWFilterMask, &mask, sizeof(eDVBSectionFilterMask));
@@ -1604,7 +1604,7 @@ void eEPGCache::channel_data::startEPG()
 		mask.mask[0] = 0xFF;
 		mask.data[1] = 0;
 		mask.mask[1] = 0xFF;
-		m_MHWReader2->connectRead(slot(*this, &eEPGCache::channel_data::readMHWData2), m_MHWConn2);
+		m_MHWReader2->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::readMHWData2), m_MHWConn2);
 		m_MHWReader2->start(mask);
 		isRunning |= MHW;
 		memcpy(&m_MHWFilterMask2, &mask, sizeof(eDVBSectionFilterMask));
@@ -1620,7 +1620,7 @@ void eEPGCache::channel_data::startEPG()
 		mask.flags = eDVBSectionFilterMask::rfCRC;
 		mask.data[0] = 0x60;
 		mask.mask[0] = 0xFE;
-		m_FreeSatScheduleOtherReader->connectRead(slot(*this, &eEPGCache::channel_data::readFreeSatScheduleOtherData), m_FreeSatScheduleOtherConn);
+		m_FreeSatScheduleOtherReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::readFreeSatScheduleOtherData), m_FreeSatScheduleOtherConn);
 		m_FreeSatScheduleOtherReader->start(mask);
 
 		/*
@@ -1630,7 +1630,7 @@ void eEPGCache::channel_data::startEPG()
 		 * and status maps)
 		 */
 		mask.pid = 3003;
-		m_FreeSatScheduleOtherReader2->connectRead(slot(*this, &eEPGCache::channel_data::readFreeSatScheduleOtherData), m_FreeSatScheduleOtherConn2);
+		m_FreeSatScheduleOtherReader2->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::readFreeSatScheduleOtherData), m_FreeSatScheduleOtherConn2);
 		m_FreeSatScheduleOtherReader2->start(mask);
 		isRunning |= FREESAT_SCHEDULE_OTHER;
 	}
@@ -1656,7 +1656,7 @@ void eEPGCache::channel_data::startEPG()
 	{
 		mask.data[0] = 0x4E;
 		mask.mask[0] = 0xFE;
-		m_NowNextReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::NOWNEXT), m_NowNextConn);
+		m_NowNextReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::NOWNEXT), m_NowNextConn);
 		m_NowNextReader->start(mask);
 		isRunning |= NOWNEXT;
 	}
@@ -1665,7 +1665,7 @@ void eEPGCache::channel_data::startEPG()
 	{
 		mask.data[0] = 0x50;
 		mask.mask[0] = 0xF0;
-		m_ScheduleReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::SCHEDULE), m_ScheduleConn);
+		m_ScheduleReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::SCHEDULE), m_ScheduleConn);
 		m_ScheduleReader->start(mask);
 		isRunning |= SCHEDULE;
 	}
@@ -1674,7 +1674,7 @@ void eEPGCache::channel_data::startEPG()
 	{
 		mask.data[0] = 0x60;
 		mask.mask[0] = 0xF0;
-		m_ScheduleOtherReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::SCHEDULE_OTHER), m_ScheduleOtherConn);
+		m_ScheduleOtherReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::SCHEDULE_OTHER), m_ScheduleOtherConn);
 		m_ScheduleOtherReader->start(mask);
 		isRunning |= SCHEDULE_OTHER;
 	}
@@ -1685,7 +1685,7 @@ void eEPGCache::channel_data::startEPG()
 		mask.pid = 0x2bc;
 		mask.data[0] = 0x4E;
 		mask.mask[0] = 0xFE;
-		m_VirginNowNextReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::VIRGIN_NOWNEXT), m_VirginNowNextConn);
+		m_VirginNowNextReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::VIRGIN_NOWNEXT), m_VirginNowNextConn);
 		m_VirginNowNextReader->start(mask);
 		isRunning |= VIRGIN_NOWNEXT;
 	}
@@ -1695,7 +1695,7 @@ void eEPGCache::channel_data::startEPG()
 		mask.pid = 0x2bc;
 		mask.data[0] = 0x50;
 		mask.mask[0] = 0xFE;
-		m_VirginScheduleReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::VIRGIN_SCHEDULE), m_VirginScheduleConn);
+		m_VirginScheduleReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::VIRGIN_SCHEDULE), m_VirginScheduleConn);
 		m_VirginScheduleReader->start(mask);
 		isRunning |= VIRGIN_SCHEDULE;
 	}
@@ -1706,7 +1706,7 @@ void eEPGCache::channel_data::startEPG()
 		mask.pid = 0x1388;
 		mask.data[0] = 0x50;
 		mask.mask[0] = 0xF0;
-		m_NetmedScheduleReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::NETMED_SCHEDULE), m_NetmedScheduleConn);
+		m_NetmedScheduleReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::NETMED_SCHEDULE), m_NetmedScheduleConn);
 		m_NetmedScheduleReader->start(mask);
 		isRunning |= NETMED_SCHEDULE;
 	}
@@ -1716,7 +1716,7 @@ void eEPGCache::channel_data::startEPG()
 		mask.pid = 0x1388;
 		mask.data[0] = 0x60;
 		mask.mask[0] = 0xF0;
-		m_NetmedScheduleOtherReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::NETMED_SCHEDULE_OTHER), m_NetmedScheduleOtherConn);
+		m_NetmedScheduleOtherReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::NETMED_SCHEDULE_OTHER), m_NetmedScheduleOtherConn);
 		m_NetmedScheduleOtherReader->start(mask);
 		isRunning |= NETMED_SCHEDULE_OTHER;
 	}
@@ -1725,10 +1725,10 @@ void eEPGCache::channel_data::startEPG()
 	if (eEPGCache::getInstance()->getEpgSources() & eEPGCache::ATSC_EIT && m_ATSC_MGTReader)
 	{
 		m_atsc_eit_index = 0;
-		m_ATSC_MGTReader->connectRead(slot(*this, &eEPGCache::channel_data::ATSC_MGTsection), m_ATSC_MGTConn);
-		m_ATSC_VCTReader->connectRead(slot(*this, &eEPGCache::channel_data::ATSC_VCTsection), m_ATSC_VCTConn);
-		m_ATSC_EITReader->connectRead(slot(*this, &eEPGCache::channel_data::ATSC_EITsection), m_ATSC_EITConn);
-		m_ATSC_ETTReader->connectRead(slot(*this, &eEPGCache::channel_data::ATSC_ETTsection), m_ATSC_ETTConn);
+		m_ATSC_MGTReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::ATSC_MGTsection), m_ATSC_MGTConn);
+		m_ATSC_VCTReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::ATSC_VCTsection), m_ATSC_VCTConn);
+		m_ATSC_EITReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::ATSC_EITsection), m_ATSC_EITConn);
+		m_ATSC_ETTReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::ATSC_ETTsection), m_ATSC_ETTConn);
 		mask.pid = 0x1ffb;
 		mask.data[0] = 0xc7;
 		mask.mask[0] = 0xff;
@@ -1746,7 +1746,7 @@ void eEPGCache::channel_data::startEPG()
 
 		mask.data[0] = 0x40;
 		mask.mask[0] = 0x40;
-		m_ViasatReader->connectRead(bind(slot(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::VIASAT), m_ViasatConn);
+		m_ViasatReader->connectRead(bind(sigc::mem_fun(*this, &eEPGCache::channel_data::readData), (int)eEPGCache::VIASAT), m_ViasatConn);
 		m_ViasatReader->start(mask);
 		isRunning |= VIASAT;
 	}
@@ -1775,7 +1775,7 @@ void eEPGCache::channel_data::ATSC_checkCompletion()
 		{
 			eDVBSectionFilterMask mask = {};
 			m_atsc_eit_index++;
-			m_ATSC_MGTReader->connectRead(slot(*this, &eEPGCache::channel_data::ATSC_MGTsection), m_ATSC_MGTConn);
+			m_ATSC_MGTReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::ATSC_MGTsection), m_ATSC_MGTConn);
 			mask.pid = 0x1ffb;
 			mask.data[0] = 0xc7;
 			mask.mask[0] = 0xff;
@@ -1825,7 +1825,7 @@ void eEPGCache::channel_data::ATSC_MGTsection(const uint8_t *d)
 			mask.pid = (*table)->getPID();
 			mask.data[0] = 0xcb;
 			mask.mask[0] = 0xff;
-			m_ATSC_EITReader->connectRead(slot(*this, &eEPGCache::channel_data::ATSC_EITsection), m_ATSC_EITConn);
+			m_ATSC_EITReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::ATSC_EITsection), m_ATSC_EITConn);
 			m_ATSC_EITReader->start(mask);
 		}
 		else if ((*table)->getTableType() == 0x0200 + m_atsc_eit_index)
@@ -1834,7 +1834,7 @@ void eEPGCache::channel_data::ATSC_MGTsection(const uint8_t *d)
 			mask.pid = (*table)->getPID();
 			mask.data[0] = 0xcc;
 			mask.mask[0] = 0xff;
-			m_ATSC_ETTReader->connectRead(slot(*this, &eEPGCache::channel_data::ATSC_ETTsection), m_ATSC_ETTConn);
+			m_ATSC_ETTReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::ATSC_ETTsection), m_ATSC_ETTConn);
 			m_ATSC_ETTReader->start(mask);
 		}
 	}
@@ -2154,6 +2154,44 @@ void eEPGCache::channel_data::readData( const uint8_t *data, int source)
 {
 	int map;
 	iDVBSectionReader *reader = NULL;
+#ifdef __sh__
+/* Dagobert: this is still very hacky, but currently I cant find
+ * the origin of the readData call. I think the caller is
+ * responsible for the unaligned data pointer in this call.
+ * So we malloc our own memory here which _should_ be aligned.
+ *
+ * TODO: We should search for the origin of this call. As I
+ * said before I need an UML Diagram or must try to import
+ * e2 and all libs into an IDE for better overview ;)
+ *
+ */
+	const uint8_t *aligned_data;
+	bool isNotAligned = false;
+
+	if ((unsigned int) data % 4 != 0)
+		isNotAligned = true;
+
+	if (isNotAligned)
+	{
+		int len = ((data[1] & 0x0F) << 8 | data[2]) -1;
+
+		/*eDebug("len %d %x, %x %x\n", len, len, data[1], data[2]);*/
+
+		if ( EIT_SIZE >= len )
+			return;
+
+		aligned_data = (const uint8_t *) malloc(len);
+
+		if ((unsigned int)aligned_data % 4 != 0)
+		{
+			eDebug("eEPGCache::channel_data::readData: ERRORERRORERROR: unaligned data pointer %p\n", aligned_data);
+		}
+
+		/*eDebug("%p %p\n", aligned_data, data); */
+		memcpy((void *) aligned_data, (const uint8_t *) data, len);
+		data = aligned_data;
+	}
+#endif
 	switch (source)
 	{
 		case NOWNEXT:
@@ -2278,6 +2316,10 @@ void eEPGCache::channel_data::readData( const uint8_t *data, int source)
 			cache->sectionRead(data, source, this);
 		}
 	}
+#ifdef __sh__
+	if (isNotAligned)
+		free((void *)aligned_data);
+#endif
 }
 
 #if ENABLE_FREESAT
@@ -3995,7 +4037,7 @@ void eEPGCache::channel_data::startPrivateReader()
 	}
 	seenPrivateSections.clear();
 	if (!m_PrivateConn)
-		m_PrivateReader->connectRead(slot(*this, &eEPGCache::channel_data::readPrivateData), m_PrivateConn);
+		m_PrivateReader->connectRead(sigc::mem_fun(*this, &eEPGCache::channel_data::readPrivateData), m_PrivateConn);
 	m_PrivateReader->start(mask);
 }
 
